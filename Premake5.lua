@@ -14,7 +14,7 @@ outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 	
 project "playground"
 	location "playground"
-	kind "ConsoleApp"
+	kind "WindowedApp"
 	language "c++"
 	cppdialect "c++17"
 	staticruntime "on"
