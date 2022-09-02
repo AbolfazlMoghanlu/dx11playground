@@ -28,12 +28,14 @@ project "playground"
 	files
 	{
 		"%{prj.name}/Source/**.h",
-		"%{prj.name}/Source/**.cpp"
+		"%{prj.name}/Source/**.cpp",
+		"%{prj.name}/Source/**.hlsl"
 	}
 
 	links
 	{
-		"d3d11.lib"
+		"d3d11.lib",
+		"D3DCompiler.lib"
 	}
 	
 	libdirs

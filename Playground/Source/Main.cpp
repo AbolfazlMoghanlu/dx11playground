@@ -2,7 +2,6 @@
 
 #include "pch.h"
 #include "Window/Window.h"
-#include <d3d11.h>
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	PSTR lpCmdLine, int nCmdShow)
@@ -36,26 +35,113 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	HRESULT R = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
 		&SwapChainDesc, &SwapChain, &Device, nullptr, &DeviceContext);
 
-	// -----------------------------------------------
-
-	ID3D11Resource* BackBuffer = nullptr;
-	ID3D11RenderTargetView* BackBufferView = nullptr;
-
-	SwapChain->GetBuffer(0, __uuidof(ID3D11Resource), reinterpret_cast<void**>(&BackBuffer));
-	Device->CreateRenderTargetView(BackBuffer, nullptr, &BackBufferView);
-	float ClearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
-
 	if (FAILED(R))
 	{
 		return -1;
 	}
 	
+	// -----------------------------------------------
+
+	ID3D11Resource* BackBuffer;
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> BackBufferView;
+
+	SwapChain->GetBuffer(0, __uuidof(ID3D11Resource), reinterpret_cast<void**>(&BackBuffer));
+	Device->CreateRenderTargetView(BackBuffer, nullptr, &BackBufferView);
+	float ClearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
+
+	// ------------------------------------------------
+
+	struct Vertex
+	{
+		float X;
+		float Y;
+	};
+
+	const Vertex vertecies[] = 
+	{
+		{0.0f, 0.5f},
+		{0.5f, -0.5f},
+		{-0.5f, -0.5f}
+	};
+
+	Microsoft::WRL::ComPtr<ID3D11Buffer> VertexBuffer;
+	D3D11_BUFFER_DESC VertexBufferDesc;
+	VertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	VertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	VertexBufferDesc.CPUAccessFlags = false;
+	VertexBufferDesc.MiscFlags = 0;
+	VertexBufferDesc.ByteWidth = sizeof(vertecies);
+	VertexBufferDesc.StructureByteStride = sizeof(Vertex);
+
+	D3D11_SUBRESOURCE_DATA VertexDataDesc;
+	VertexDataDesc.pSysMem = vertecies;
+
+	Device->CreateBuffer(&VertexBufferDesc, &VertexDataDesc, &VertexBuffer);
+
+	const UINT stride = sizeof(Vertex);
+	const UINT offset = 0;
+	DeviceContext->IASetVertexBuffers(0, 1, VertexBuffer.GetAddressOf(), &stride, &offset);
+
+	// ------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11VertexShader> VertexShader;
+	Microsoft::WRL::ComPtr<ID3DBlob> VertexShaderBlob;
+
+	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/VertexShader.cso", VertexShaderBlob.GetAddressOf());
+	Device->CreateVertexShader(VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), nullptr, &VertexShader);
+
+	DeviceContext->VSSetShader(VertexShader.Get(), 0, 0);
+
+	// ------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11InputLayout> VertexInputLayout;
+	const D3D11_INPUT_ELEMENT_DESC VertexInputElementDesc[] =
+	{
+		{"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}
+	};
+
+	Device->CreateInputLayout(VertexInputElementDesc, (UINT)std::size(VertexInputElementDesc),
+		VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), &VertexInputLayout);
+
+	DeviceContext->IASetInputLayout(VertexInputLayout.Get());
+
+	// ------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11PixelShader> PixelShader;
+	Microsoft::WRL::ComPtr<ID3DBlob> PixelShaderBlob;
+
+	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/PixelShader.cso", &PixelShaderBlob);
+	Device->CreatePixelShader(PixelShaderBlob->GetBufferPointer(), PixelShaderBlob->GetBufferSize(), nullptr, &PixelShader);
+
+	DeviceContext->PSSetShader(PixelShader.Get(), 0, 0);
+	DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), nullptr);
+
+	// ------------------------------------------------
+
+	DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// ------------------------------------------------
+
+	D3D11_VIEWPORT ViewportDesc;
+	ViewportDesc.Width = 640;
+	ViewportDesc.Height = 480;
+	ViewportDesc.MinDepth = 0.0f;
+	ViewportDesc.MaxDepth = 1.0f;
+	ViewportDesc.TopLeftX = 0.0f;
+	ViewportDesc.TopLeftY = 0.0f;
+
+	DeviceContext->RSSetViewports(1, &ViewportDesc);
+
+	// -----------------------------------------------
+
 	while (MainWindow.IsOpen())
 	{
 		MainWindow.Tick(1);
 
+		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
 
-		DeviceContext->ClearRenderTargetView(BackBufferView, ClearColor);
+		DeviceContext->Draw(3, 0);
+
 		SwapChain->Present(1, 0);
 	}
 
