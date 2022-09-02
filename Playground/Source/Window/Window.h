@@ -18,6 +18,7 @@ public:
 
 
 	bool IsOpen() const;
+	HWND& GetHandle();
 
 protected:
 	virtual LRESULT HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam);

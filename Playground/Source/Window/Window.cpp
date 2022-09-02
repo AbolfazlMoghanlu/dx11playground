@@ -91,6 +91,11 @@ bool Window::IsOpen() const
 	return bOpen;
 }
 
+HWND& Window::GetHandle()
+{
+	return WindowHandle;
+}
+
 LRESULT Window::HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam)
 {
 	switch (msg)

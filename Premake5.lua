@@ -30,6 +30,11 @@ project "playground"
 		"%{prj.name}/Source/**.h",
 		"%{prj.name}/Source/**.cpp"
 	}
+
+	links
+	{
+		"d3d11.lib"
+	}
 	
 	libdirs
 	{

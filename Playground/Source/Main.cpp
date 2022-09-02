@@ -2,87 +2,7 @@
 
 #include "pch.h"
 #include "Window/Window.h"
-
-/*
-LRESULT CALLBACK WindowsProcedual(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam)
-{
-	switch (msg)
-	{
-		case WM_CLOSE:
-			PostQuitMessage(1);
-			break;
-
-		case WM_KEYDOWN:
-			if (Wparam == 'F')
-			{
-				
-			}
-			break;
-
-		case WM_CHAR:
-			break;
-
-		case WM_LBUTTONDOWN:
-			POINTS pt = MAKEPOINTS(Lparam);
-			std::wstringstream ss;
-			ss << pt.x << " , " << pt.y;
-			SetWindowText(Hanlde, ss.str().c_str());
-			break;
-	}
-
-	return DefWindowProc(Hanlde, msg, Wparam, Lparam);
-}
-
-int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
-	PSTR lpCmdLine, int nCmdShow)
-{
-	const LPCWSTR WindowClassName = L"Dx11Playground";
-
-	WNDCLASSEX WindowClass;
-	WindowClass.cbSize = sizeof(WindowClass);
-	WindowClass.style = CS_OWNDC;
-	WindowClass.lpfnWndProc = WindowsProcedual;
-	WindowClass.cbClsExtra = 0;
-	WindowClass.cbWndExtra = 0;
-	WindowClass.hInstance = hInstance;
-	WindowClass.hCursor = nullptr;
-	WindowClass.hbrBackground = nullptr;
-	WindowClass.hIcon = nullptr;
-	WindowClass.hIconSm = nullptr;
-	WindowClass.lpszMenuName = nullptr;
-	WindowClass.lpszClassName = WindowClassName;
-
-	RegisterClassEx(&WindowClass);
-
-
-	DWORD StyleFlag = WS_CAPTION | WS_MINIMIZE | WS_SYSMENU;
-
-	HWND WindowHandle = CreateWindowEx(0, WindowClassName, L"Dx11", StyleFlag,
-		0, 0, 640, 480, nullptr, nullptr, hInstance, nullptr);
-
-	ShowWindow(WindowHandle, SW_SHOW);
-
-	MSG msg;
-	BOOL bResult;
-	while (bResult = GetMessage(&msg, nullptr, 0, 0) > 0)
-	{
-		TranslateMessage(&msg);
-
-		DispatchMessage(&msg);
-	}
-
-	if (bResult == -1)
-	{
-		std::cout << "Error!";
-		return -1;
-	}
-
-	else
-	{
-		return (int)msg.wParam;
-	}
-}
-*/
+#include <d3d11.h>
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	PSTR lpCmdLine, int nCmdShow)
@@ -90,11 +10,60 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	Window::Startup();
 
 	Window MainWindow(L"DxWindow", 640, 480);
+
+
+	ID3D11Device* Device;
+	IDXGISwapChain* SwapChain;
+	ID3D11DeviceContext* DeviceContext;
+
+	DXGI_SWAP_CHAIN_DESC SwapChainDesc;
+	SwapChainDesc.BufferDesc.Width = 0;
+	SwapChainDesc.BufferDesc.Height = 0;
+	SwapChainDesc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+	SwapChainDesc.BufferDesc.RefreshRate.Numerator = 0;
+	SwapChainDesc.BufferDesc.RefreshRate.Denominator = 0;
+	SwapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+	SwapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+	SwapChainDesc.SampleDesc.Count = 1;
+	SwapChainDesc.SampleDesc.Quality = 0;
+	SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	SwapChainDesc.BufferCount = 1;
+	SwapChainDesc.OutputWindow = MainWindow.GetHandle();
+	SwapChainDesc.Windowed = TRUE;
+	SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+	SwapChainDesc.Flags = 0;
+
+	HRESULT R = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+		&SwapChainDesc, &SwapChain, &Device, nullptr, &DeviceContext);
+
+	// -----------------------------------------------
+
+	ID3D11Resource* BackBuffer = nullptr;
+	ID3D11RenderTargetView* BackBufferView = nullptr;
+
+	SwapChain->GetBuffer(0, __uuidof(ID3D11Resource), reinterpret_cast<void**>(&BackBuffer));
+	Device->CreateRenderTargetView(BackBuffer, nullptr, &BackBufferView);
+	float ClearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
+
+	if (FAILED(R))
+	{
+		return -1;
+	}
 	
 	while (MainWindow.IsOpen())
 	{
 		MainWindow.Tick(1);
+
+
+		DeviceContext->ClearRenderTargetView(BackBufferView, ClearColor);
+		SwapChain->Present(1, 0);
 	}
+
+	if (DeviceContext)	{ DeviceContext->Release(); }
+	if (SwapChain)		{ SwapChain->Release(); }
+	if (Device)			{ Device->Release(); }
+	if (BackBuffer)		{ BackBuffer->Release(); }
+	if (BackBufferView)	{ BackBufferView->Release(); }
 
 	Window::ShutDown();
 
