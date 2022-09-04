@@ -11,13 +11,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	Window MainWindow(L"DxWindow", 640, 480);
 
 
-	ID3D11Device* Device;
-	IDXGISwapChain* SwapChain;
-	ID3D11DeviceContext* DeviceContext;
+	Microsoft::WRL::ComPtr<ID3D11Device> Device;
+	Microsoft::WRL::ComPtr<IDXGISwapChain> SwapChain;
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext> DeviceContext;
 
 	DXGI_SWAP_CHAIN_DESC SwapChainDesc;
-	SwapChainDesc.BufferDesc.Width = 0;
-	SwapChainDesc.BufferDesc.Height = 0;
+	SwapChainDesc.BufferDesc.Width = 640;
+	SwapChainDesc.BufferDesc.Height = 480;
 	SwapChainDesc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
 	SwapChainDesc.BufferDesc.RefreshRate.Numerator = 0;
 	SwapChainDesc.BufferDesc.RefreshRate.Denominator = 0;
@@ -32,21 +32,23 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 	SwapChainDesc.Flags = 0;
 
-	HRESULT R = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, nullptr, 0, D3D11_SDK_VERSION,
+	UINT CFlags = D3D11_CREATE_DEVICE_DEBUG;
+
+	HRESULT Result = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, CFlags, nullptr, 0, D3D11_SDK_VERSION,
 		&SwapChainDesc, &SwapChain, &Device, nullptr, &DeviceContext);
 
-	if (FAILED(R))
+	if (FAILED(Result))
 	{
 		return -1;
 	}
 	
 	// -----------------------------------------------
 
-	ID3D11Resource* BackBuffer;
+	Microsoft::WRL::ComPtr<ID3D11Resource> BackBuffer;
 	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> BackBufferView;
 
-	SwapChain->GetBuffer(0, __uuidof(ID3D11Resource), reinterpret_cast<void**>(&BackBuffer));
-	Device->CreateRenderTargetView(BackBuffer, nullptr, &BackBufferView);
+	SwapChain->GetBuffer(0, __uuidof(ID3D11Resource), reinterpret_cast<void**>(BackBuffer.GetAddressOf()));
+	Device->CreateRenderTargetView(BackBuffer.Get(), nullptr, &BackBufferView);
 	float ClearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
 
 	// ------------------------------------------------
@@ -101,7 +103,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	};
 
 	Device->CreateInputLayout(VertexInputElementDesc, (UINT)std::size(VertexInputElementDesc),
-		VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), &VertexInputLayout);
+		VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), VertexInputLayout.GetAddressOf());
 
 	DeviceContext->IASetInputLayout(VertexInputLayout.Get());
 
@@ -145,11 +147,20 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		SwapChain->Present(1, 0);
 	}
 
-	if (DeviceContext)	{ DeviceContext->Release(); }
-	if (SwapChain)		{ SwapChain->Release(); }
-	if (Device)			{ Device->Release(); }
-	if (BackBuffer)		{ BackBuffer->Release(); }
-	if (BackBufferView)	{ BackBufferView->Release(); }
+	VertexShader.Reset();
+	VertexShaderBlob.Reset();
+	PixelShader.Reset();
+	PixelShaderBlob.Reset();
+
+	VertexBuffer.Reset();
+	VertexInputLayout.Reset();
+
+	BackBufferView.Reset();
+	BackBuffer.Reset();
+
+	SwapChain.Reset();
+	DeviceContext.Reset();
+	Device.Reset();
 
 	Window::ShutDown();
 

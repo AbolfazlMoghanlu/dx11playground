@@ -16,7 +16,10 @@ Window::Window(LPCWSTR Title, int SizeX, int SizeY, DWORD Style /*= DefaultStyle
 
 Window::~Window()
 {
-	DestroyWindow(WindowHandle);
+	if (WindowHandle)
+	{
+		DestroyWindow(WindowHandle);
+	}
 }
 
 void Window::Startup()
@@ -102,6 +105,7 @@ LRESULT Window::HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lpara
 	{
 	case WM_CLOSE:
 		PostQuitMessage(1);
+		DestroyWindow(WindowHandle);
 		bOpen = false;
 		break;
 
