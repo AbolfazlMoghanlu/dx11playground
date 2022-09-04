@@ -57,13 +57,25 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	{
 		float X;
 		float Y;
+		float Z;
+
+		float R;
+		float G;
+		float B;
 	};
 
 	const Vertex vertecies[] = 
 	{
-		{0.0f, 0.5f},
-		{0.5f, -0.5f},
-		{-0.5f, -0.5f}
+		{0.5f, 0.5f, 0.0f,		1.0f, 1.0f, 1.0f},
+		{-0.5f, 0.5f, 0.0f,		1.0f, 0.0f, 0.0f},
+		{0.5f, 0.3f, 0.5f,		0.0f, 1.0f, 0.0f},
+		{-0.5f, 0.3f, 0.5f,		0.0f, 0.0f, 1.0f},
+	};
+
+	const unsigned short int Indices[] =
+	{
+		1, 0, 2,
+		3, 1, 2
 	};
 
 	Microsoft::WRL::ComPtr<ID3D11Buffer> VertexBuffer;
@@ -99,7 +111,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	Microsoft::WRL::ComPtr<ID3D11InputLayout> VertexInputLayout;
 	const D3D11_INPUT_ELEMENT_DESC VertexInputElementDesc[] =
 	{
-		{"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0}
+		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+		{"Color", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
 	};
 
 	Device->CreateInputLayout(VertexInputElementDesc, (UINT)std::size(VertexInputElementDesc),
@@ -109,6 +122,23 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	// ------------------------------------------------
 
+	D3D11_BUFFER_DESC IndexBufferDesc;
+	IndexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	IndexBufferDesc.ByteWidth = sizeof(Indices);
+	IndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	IndexBufferDesc.CPUAccessFlags = false;
+	IndexBufferDesc.MiscFlags = 0;
+	IndexBufferDesc.StructureByteStride = sizeof(unsigned short int);
+
+	D3D11_SUBRESOURCE_DATA IndexData;
+	IndexData.pSysMem = Indices;
+
+	Microsoft::WRL::ComPtr<ID3D11Buffer> IndexBuffer;
+	Device->CreateBuffer(&IndexBufferDesc, &IndexData, &IndexBuffer);
+
+	DeviceContext->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+	// ------------------------------------------------
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> PixelShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> PixelShaderBlob;
 
@@ -142,7 +172,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
 
-		DeviceContext->Draw(3, 0);
+		DeviceContext->DrawIndexed(6, 0, 0);
 
 		SwapChain->Present(1, 0);
 	}
