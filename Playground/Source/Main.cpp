@@ -10,6 +10,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	Window MainWindow(L"DxWindow", 640, 480);
 
+	AllocConsole();
+	
+	static std::ofstream conout("CONOUT$", std::ios::out);
+	// Set std::cout stream buffer to conout's buffer (aka redirect/fdreopen)
+	std::cout.rdbuf(conout.rdbuf());
+	
+	unsigned long int errorcode = GetLastError();
 
 	Microsoft::WRL::ComPtr<ID3D11Device> Device;
 	Microsoft::WRL::ComPtr<IDXGISwapChain> SwapChain;

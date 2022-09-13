@@ -6,10 +6,20 @@
 WNDCLASSEX Window::WindowClass;
 HINSTANCE Window::HInstance;
 
-Window::Window(LPCWSTR Title, int SizeX, int SizeY, DWORD Style /*= DefaultStyle*/)
+Window::Window(LPCWSTR InTitle, int InSizeX, int InSizeY, DWORD InStyle /*= DefaultStyle*/)
 {
-	WindowHandle = CreateWindowEx(0, WINDOW_CLASS_NAME, Title, Style,
-		0, 0, SizeX, SizeY, nullptr, nullptr, HInstance, this);
+	SizeX = InSizeX;
+	SizeY = InSizeY;
+
+	RECT R = {0, 0, InSizeX, InSizeY};
+
+	AdjustWindowRect(&R, InStyle, false);
+
+	int AdjustedSizeX = R.right - R.left;
+	int AdjustedSizeY = R.bottom - R.top;
+
+	WindowHandle = CreateWindowEx(0, WINDOW_CLASS_NAME, InTitle, InStyle,
+		0, 0, AdjustedSizeX, AdjustedSizeY, nullptr, nullptr, HInstance, this);
 
 	ShowWindow(WindowHandle, SW_SHOW);
 }
@@ -39,8 +49,13 @@ void Window::Tick(float DeltaTime)
 	BOOL bResult;
 	bResult = GetMessage(&msg, WindowHandle, 0, 0) > 0;
 
-	TranslateMessage(&msg);
-	DispatchMessage(&msg);
+	if (bResult)
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+
+	UpdateCursorPosition();
 }
 
 void Window::RegisterWindowClass()
@@ -89,6 +104,19 @@ LRESULT CALLBACK Window::WindowProcAbs(HWND Hanlde, UINT msg, WPARAM Wparam, LPA
 	return Wind->HandleMessege(Hanlde, msg, Wparam, Lparam);
 }
 
+void Window::UpdateCursorPosition()
+{
+	POINT P = POINT();
+	GetCursorPos(&P);
+
+	ScreenToClient(WindowHandle, &P);
+
+	MouseLastX = Math::Clamp((float)P.x / SizeX, 0.0f, 1.0f);
+	MouseLastY = Math::Clamp((float)P.y / SizeY, 0.0f, 1.0f);
+
+	std::cout << MouseLastX << ", " << MouseLastY << std::endl;
+}
+
 bool Window::IsOpen() const
 {
 	return bOpen;
@@ -130,4 +158,5 @@ LRESULT Window::HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lpara
 	}
 
 	return DefWindowProc(Hanlde, msg, Wparam, Lparam);
+	//return nullptr;
 }
