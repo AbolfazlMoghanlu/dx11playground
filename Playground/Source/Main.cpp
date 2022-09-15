@@ -3,6 +3,10 @@
 #include "pch.h"
 #include "Window/Window.h"
 
+Rotatorf CameraRotation = Rotatorf(0.0f);
+const float CameraSpeedX = 500.0f;
+const float CameraSpeedY = 500.0f;
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	PSTR lpCmdLine, int nCmdShow)
 {
@@ -10,13 +14,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	Window MainWindow(L"DxWindow", 640, 480);
 
+
 	AllocConsole();
 	
 	static std::ofstream conout("CONOUT$", std::ios::out);
 	// Set std::cout stream buffer to conout's buffer (aka redirect/fdreopen)
 	std::cout.rdbuf(conout.rdbuf());
 	
-	unsigned long int errorcode = GetLastError();
 
 	Microsoft::WRL::ComPtr<ID3D11Device> Device;
 	Microsoft::WRL::ComPtr<IDXGISwapChain> SwapChain;
@@ -73,16 +77,16 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	const Vertex vertecies[] = 
 	{
-		{0.5f, 0.5f, 0.0f,		1.0f, 1.0f, 1.0f},
-		{-0.5f, 0.5f, 0.0f,		1.0f, 0.0f, 0.0f},
-		{0.5f, 0.3f, 0.5f,		0.0f, 1.0f, 0.0f},
-		{-0.5f, 0.3f, 0.5f,		0.0f, 0.0f, 1.0f},
+		{0.5f, 0.0f, 0.5f,		1.0f, 1.0f, 1.0f},
+		{-0.5f, 0.0f, -0.5f,		1.0f, 0.0f, 0.0f},
+		{0.5f, 0.0f, -0.5f,		0.0f, 1.0f, 0.0f},
+		//{-0.5f, 0.2f, 0.5f,	0.0f, 0.0f, 1.0f},
 	};
 
 	const unsigned short int Indices[] =
 	{
-		1, 0, 2,
-		3, 1, 2
+		0, 1, 2,
+		//3, 1, 2
 	};
 
 	Microsoft::WRL::ComPtr<ID3D11Buffer> VertexBuffer;
@@ -173,11 +177,54 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	// -----------------------------------------------
 
+	struct VSContantBufferLayout
+	{
+		Matrix<float> ViewMatrix;
+	};
+
+	D3D11_BUFFER_DESC VsConstantBufferDesc;
+	VsConstantBufferDesc.ByteWidth = sizeof(VSContantBufferLayout);
+	VsConstantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	VsConstantBufferDesc.CPUAccessFlags = false;
+	VsConstantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	VsConstantBufferDesc.MiscFlags = 0;
+	VsConstantBufferDesc.StructureByteStride = 0;
+
+	D3D11_SUBRESOURCE_DATA VSConstantData;
+
+	VSContantBufferLayout VsConstantBL;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> VsConstantBuffer;
+
 	while (MainWindow.IsOpen())
 	{
+
+		if (MainWindow.IsRightClickDown())
+		{
+			Rotatorf DeltaRotation = Rotatorf(CameraSpeedY * MainWindow.MouseDeltaY, CameraSpeedX * MainWindow.MouseDeltaX, 0.0f);
+			CameraRotation = Rotatorf::CombineRotators(CameraRotation, DeltaRotation);
+		}
+		std::cout << CameraRotation.ToString() << std::endl;			
+
+		
 		MainWindow.Tick(1);
 
 		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
+
+		// ----------------------------------------------------------------
+
+		Vector3f CameraForwardVector = CameraRotation.Vector();
+		Vector3f CameraRightVector = Vector3f::CrossProduct(CameraForwardVector, Vector3f(0.0f, 0.0f, 1.0f));
+		Vector3f CameraUpVector = Vector3f::CrossProduct(CameraRightVector, CameraForwardVector);
+
+		Matrix<float> CameraViewMatrix = ViewMatrix<float>(Vector3f::ZeroVector, CameraForwardVector, CameraRightVector, CameraUpVector);
+
+		VsConstantBL.ViewMatrix = CameraViewMatrix;
+		VSConstantData.pSysMem = &VsConstantBL;
+		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
+
+		DeviceContext->VSSetConstantBuffers(0, 1, VsConstantBuffer.GetAddressOf());
+
+		// ----------------------------------------------------------------
 
 		DeviceContext->DrawIndexed(6, 0, 0);
 

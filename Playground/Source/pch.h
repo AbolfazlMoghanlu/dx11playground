@@ -13,3 +13,7 @@
 #include <memory>
 
 #include "MathLibrary.h"
+#include "Vector.h"
+#include "Rotator.h"
+#include "Plane.h"
+#include "Matrix.h"

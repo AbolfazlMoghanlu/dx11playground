@@ -10,9 +10,9 @@ Window::Window(LPCWSTR InTitle, int InSizeX, int InSizeY, DWORD InStyle /*= Defa
 {
 	SizeX = InSizeX;
 	SizeY = InSizeY;
-
+	
 	RECT R = {0, 0, InSizeX, InSizeY};
-
+	
 	AdjustWindowRect(&R, InStyle, false);
 
 	int AdjustedSizeX = R.right - R.left;
@@ -47,10 +47,10 @@ void Window::Tick(float DeltaTime)
 {
 	MSG msg;
 	BOOL bResult;
-	bResult = GetMessage(&msg, WindowHandle, 0, 0) > 0;
+	bResult = PeekMessage(&msg, WindowHandle, 0, 0, PM_REMOVE) != 0;
 
-	if (bResult)
-	{
+ 	if (bResult)
+ 	{
 		TranslateMessage(&msg);
 		DispatchMessage(&msg);
 	}
@@ -111,10 +111,14 @@ void Window::UpdateCursorPosition()
 
 	ScreenToClient(WindowHandle, &P);
 
-	MouseLastX = Math::Clamp((float)P.x / SizeX, 0.0f, 1.0f);
-	MouseLastY = Math::Clamp((float)P.y / SizeY, 0.0f, 1.0f);
+	float NewX = Math::Clamp((float)P.x / SizeX, 0.0f, 1.0f);
+	float NewY = Math::Clamp((float)P.y / SizeY, 0.0f, 1.0f);
 
-	std::cout << MouseLastX << ", " << MouseLastY << std::endl;
+	MouseDeltaX = NewX - MouseLastX;
+	MouseDeltaY = NewY - MouseLastY;
+
+	MouseLastX = NewX;
+	MouseLastY = NewY;
 }
 
 bool Window::IsOpen() const
@@ -125,6 +129,12 @@ bool Window::IsOpen() const
 HWND& Window::GetHandle()
 {
 	return WindowHandle;
+}
+
+bool Window::IsRightClickDown() const
+{
+	// high bit holds up or down state, down bit holds toggle state
+	return GetKeyState(VK_RBUTTON) & 128;
 }
 
 LRESULT Window::HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam)
@@ -155,8 +165,8 @@ LRESULT Window::HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lpara
 		SetWindowText(Hanlde, ss.str().c_str());
 		*/
 		break;
+
 	}
 
 	return DefWindowProc(Hanlde, msg, Wparam, Lparam);
-	//return nullptr;
 }

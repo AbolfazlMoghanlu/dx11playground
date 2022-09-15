@@ -20,6 +20,9 @@ public:
 	bool IsOpen() const;
 	HWND& GetHandle();
 
+
+	bool IsRightClickDown() const;
+
 protected:
 	virtual LRESULT HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam);
 
@@ -39,7 +42,11 @@ private:
 	int SizeX = 0;
 	int SizeY = 0;
 
-	float MouseLastX = 0;
-	float MouseLastY = 0;
+public:
+	float MouseLastX = 0.0f;
+	float MouseLastY = 0.0f;
+
+	float MouseDeltaX = 0.0f;
+	float MouseDeltaY = 0.0f;
 };
 
