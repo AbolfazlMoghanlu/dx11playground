@@ -3,6 +3,9 @@
 #define SMALL_NUMBER		(1.e-8f)
 #define PI_ON_180_DEGREES 0.0174532778 // PI / 180
 
+#include "Matrix.h"
+#include "Vector.h"
+
 class Math
 {
 public:
@@ -38,4 +41,6 @@ public:
 	static float Abs(float A);
 	static double TruncToDouble(double A);
 	static float Mod(float A, float B);
+
+	static Matrix<float> LookAt(const Vector3f Eye, const Vector3f& CameraForwardVector, const Vector3f& WorldUpVector);
 };

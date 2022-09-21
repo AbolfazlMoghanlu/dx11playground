@@ -2,10 +2,13 @@
 
 #include "pch.h"
 #include "Window/Window.h"
+#include <time.h>
 
 Rotatorf CameraRotation = Rotatorf(0.0f);
-const float CameraSpeedX = 500.0f;
-const float CameraSpeedY = 500.0f;
+const float MouseSpeed = 500.0f;
+const float CameraSpeed = 100.0f;
+
+Vector3f CameraPosition = Vector3f(0.0f);
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	PSTR lpCmdLine, int nCmdShow)
@@ -75,18 +78,41 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float B;
 	};
 
+// 	const Vertex vertecies[] = 
+// 	{
+// 		{0.5f, 0.5f, 0.2f,		1.0f, 1.0f, 1.0f},
+// 		{-0.5f, -0.5f, 0.2f,	1.0f, 0.0f, 0.0f},
+// 		{0.5f, -0.5f, 0.2f,		0.0f, 1.0f, 0.0f},
+// 		{-0.5f, 0.5f, 0.2f,		0.0f, 0.0f, 1.0f},
+// 	};
+// 
+// 	const unsigned short int Indices[] =
+// 	{
+// 		0, 2, 1,
+// 		0, 1, 3
+// 	};
+
+
 	const Vertex vertecies[] = 
 	{
-		{0.5f, 0.0f, 0.5f,		1.0f, 1.0f, 1.0f},
-		{-0.5f, 0.0f, -0.5f,		1.0f, 0.0f, 0.0f},
-		{0.5f, 0.0f, -0.5f,		0.0f, 1.0f, 0.0f},
-		//{-0.5f, 0.2f, 0.5f,	0.0f, 0.0f, 1.0f},
+		 {0.5 , 0.5  ,-0.5 ,		1.0f, 1.0f, 1.0f},	//0
+		 {0.5 , -0.5 ,-0.5 ,		1.0f, 0.0f, 0.0f},	//1
+		 {0.5 , 0.5  ,0.5  ,		0.0f, 1.0f, 0.0f},	//2
+		 {0.5 , -0.5 ,0.5  ,		0.0f, 0.0f, 1.0f},	//3
+		 {-0.5,  0.5 ,-0.5 ,		1.0f, 1.0f, 1.0f},	//4
+		 {-0.5,  -0.5, -0.5,		1.0f, 0.0f, 0.0f},	//5
+		 {-0.5,  0.5 ,0.5  ,		0.0f, 1.0f, 0.0f},	//6
+		 {-0.5,  -0.5, 0.5 ,		0.0f, 0.0f, 1.0f}	//7
 	};
 
 	const unsigned short int Indices[] =
 	{
-		0, 1, 2,
-		//3, 1, 2
+		4, 0, 1, 4, 1, 5, // front
+		6, 2, 0, 6, 0, 4, // top
+		0, 2, 3, 0, 3, 1, // right
+		6, 4, 5, 6, 5, 7, // left
+		5, 1, 3, 5, 3, 7, // bottom
+		6, 2, 3, 6, 3, 7  // back
 	};
 
 	Microsoft::WRL::ComPtr<ID3D11Buffer> VertexBuffer;
@@ -157,7 +183,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	Device->CreatePixelShader(PixelShaderBlob->GetBufferPointer(), PixelShaderBlob->GetBufferSize(), nullptr, &PixelShader);
 
 	DeviceContext->PSSetShader(PixelShader.Get(), 0, 0);
-	DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), nullptr);
+	//DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), nullptr);
 
 	// ------------------------------------------------
 
@@ -179,6 +205,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	struct VSContantBufferLayout
 	{
+		Matrix<float> TransformMatrix;
 		Matrix<float> ViewMatrix;
 	};
 
@@ -195,29 +222,93 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	VSContantBufferLayout VsConstantBL;
 	Microsoft::WRL::ComPtr<ID3D11Buffer> VsConstantBuffer;
 
+	// -----------------------------------------------
+
+	D3D11_TEXTURE2D_DESC DepthDesc;
+	DepthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	DepthDesc.Width = 640;
+	DepthDesc.Height = 480;
+	DepthDesc.MipLevels = 1;
+	DepthDesc.CPUAccessFlags = false;
+	DepthDesc.MiscFlags = 0;
+	DepthDesc.ArraySize = 1;
+	DepthDesc.SampleDesc.Count = 1;
+	DepthDesc.SampleDesc.Quality = 0;
+	DepthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+	DepthDesc.Usage = D3D11_USAGE_DEFAULT;
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> DepthStencilTexture;
+	Device->CreateTexture2D(&DepthDesc, NULL, &DepthStencilTexture);
+
+
+	D3D11_DEPTH_STENCIL_VIEW_DESC DepthViewDesc;
+	DepthViewDesc.Format = DepthDesc.Format;
+	DepthViewDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+	DepthViewDesc.Flags = 0;
+	DepthViewDesc.Texture2D.MipSlice = 0;
+
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> DepthStencilView;
+	Device->CreateDepthStencilView(DepthStencilTexture.Get(), &DepthViewDesc, &DepthStencilView);
+
+	DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), DepthStencilView.Get());
+
+
+	D3D11_DEPTH_STENCIL_DESC DepthStencilDesc;
+	DepthStencilDesc.DepthEnable = true;
+	DepthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+	DepthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS;
+	DepthStencilDesc.StencilEnable = true;
+	DepthStencilDesc.StencilWriteMask = 255;
+	DepthStencilDesc.StencilReadMask = 255;
+	DepthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
+	DepthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_REPLACE;
+	DepthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_REPLACE;
+	DepthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_REPLACE;
+	
+	DepthStencilDesc.BackFace.StencilFunc = D3D11_COMPARISON_NEVER;
+	DepthStencilDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
+	DepthStencilDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
+	DepthStencilDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilState> DepthState;
+	Device->CreateDepthStencilState(&DepthStencilDesc, &DepthState);
+
+	DeviceContext->OMSetDepthStencilState(DepthState.Get(), 128);
+
 	while (MainWindow.IsOpen())
 	{
-
 		if (MainWindow.IsRightClickDown())
 		{
-			Rotatorf DeltaRotation = Rotatorf(CameraSpeedY * MainWindow.MouseDeltaY, CameraSpeedX * MainWindow.MouseDeltaX, 0.0f);
+			Rotatorf DeltaRotation = Rotatorf(MouseSpeed * MainWindow.MouseDeltaY, MouseSpeed * MainWindow.MouseDeltaX, 0.0f);
 			CameraRotation = Rotatorf::CombineRotators(CameraRotation, DeltaRotation);
 		}
-		std::cout << CameraRotation.ToString() << std::endl;			
+		std::cout << CameraRotation.ToString() << std::endl;
 
+
+		CameraPosition += Vector3f(MainWindow.GetRightValue() * CameraSpeed, MainWindow.GetUpValue() * CameraSpeed, 0.0f);
+		std::cout << CameraPosition.ToString() << std::endl;
 		
 		MainWindow.Tick(1);
 
 		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
+		DeviceContext->ClearDepthStencilView(DepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 		// ----------------------------------------------------------------
 
+		auto Time = std::chrono::high_resolution_clock();
+		auto Now =  Time.now();
+
+		float TimeSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(Now.time_since_epoch()).count();
+		
+
+		Matrix<float> TransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0, 0.0, 0.5f), Vector3f(0.25f));
+
 		Vector3f CameraForwardVector = CameraRotation.Vector();
-		Vector3f CameraRightVector = Vector3f::CrossProduct(CameraForwardVector, Vector3f(0.0f, 0.0f, 1.0f));
-		Vector3f CameraUpVector = Vector3f::CrossProduct(CameraRightVector, CameraForwardVector);
 
-		Matrix<float> CameraViewMatrix = ViewMatrix<float>(Vector3f::ZeroVector, CameraForwardVector, CameraRightVector, CameraUpVector);
+		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 
+
+		VsConstantBL.TransformMatrix = TransformMatrix;
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
 		VSConstantData.pSysMem = &VsConstantBL;
 		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
@@ -226,7 +317,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		// ----------------------------------------------------------------
 
-		DeviceContext->DrawIndexed(6, 0, 0);
+		DeviceContext->DrawIndexed(36, 0, 0);
 
 		SwapChain->Present(1, 0);
 	}

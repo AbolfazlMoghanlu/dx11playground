@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Vector.h"
+#include "Rotator.h"
 #include "Plane.h"
 
 template<typename T>
@@ -76,4 +77,20 @@ ViewMatrix<T>::ViewMatrix(const Vector3f& Location, const Vector3f& ForwardVecto
 	M[3][3] = 1.0f;
 }
 
+// ------------------------------------------------------------------------
 
+template<typename T>
+class ScaleTranslationMatrix : public Matrix<T>
+{
+public:
+	ScaleTranslationMatrix(const Vector3f& Location, const Vector3f& Scale);
+};
+
+template<typename T>
+ScaleTranslationMatrix<T>::ScaleTranslationMatrix(const Vector3f& Location, const Vector3f& Scale)
+{
+	M[0][0] = Scale.X;		M[0][1] = 0.0f;			M[0][2] = 0.0f;			M[0][3] = 0;
+	M[1][0] = 0.0f;			M[1][1] = Scale.Y;		M[1][2] = 0.0f;			M[1][3] = 0;
+	M[2][0] = 0.0f;			M[2][1] = 0.0f;			M[2][2] = Scale.Z;		M[2][3] = 0;
+	M[3][0] = Location.X;	M[3][1] = Location.Y;	M[3][2] = Location.Z;	M[3][3] = 1;
+}

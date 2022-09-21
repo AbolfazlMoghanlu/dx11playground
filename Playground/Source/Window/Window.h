@@ -19,9 +19,13 @@ public:
 
 	bool IsOpen() const;
 	HWND& GetHandle();
+	void ForceClose();
 
 
 	bool IsRightClickDown() const;
+
+	float GetRightValue() const;
+	float GetUpValue() const;
 
 protected:
 	virtual LRESULT HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam);

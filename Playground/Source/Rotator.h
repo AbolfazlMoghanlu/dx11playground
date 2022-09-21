@@ -41,6 +41,16 @@ public:
 
 	Vector3<T> Vector()
 	{
+// 		const T PithClamped = Math::Mod(Pitch, (T)360.0);
+// 		const T YawClamped = Math::Mod(Yaw, (T)360.0);
+// 
+// 		T CP, SP, CY, SY;
+// 		Math::SinCos(&SP, &CP, Math::DegreesToRadians(PithClamped));
+// 		Math::SinCos(&SY, &CY, Math::DegreesToRadians(YawClamped));
+// 
+// 		return Vector3(CP * CY, CP * SY, SP);
+
+
 		const T PithClamped = Math::Mod(Pitch, (T)360.0);
 		const T YawClamped = Math::Mod(Yaw, (T)360.0);
 
@@ -48,7 +58,7 @@ public:
 		Math::SinCos(&SP, &CP, Math::DegreesToRadians(PithClamped));
 		Math::SinCos(&SY, &CY, Math::DegreesToRadians(YawClamped));
 
-		return Vector3(CP * CY, CP * SY, SP);
+		return Vector3(CP * SY, SP, CP * CY);
 	}
 
 	Vector3<T> GetForwardVector()

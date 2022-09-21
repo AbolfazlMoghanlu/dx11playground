@@ -111,13 +111,13 @@ template<typename T>
 const Vector3<T> Vector3<T>::OneVector = Vector3<T>(1);
 
 template<typename T>
-const Vector3<T> Vector3<T>::UpVector = Vector3<T>(0, 0, 1);
+const Vector3<T> Vector3<T>::UpVector = Vector3<T>(0, 1, 0);
 
 template<typename T>
-const Vector3<T> Vector3<T>::ForwardVector = Vector3<T>(1, 0, 0);
+const Vector3<T> Vector3<T>::ForwardVector = Vector3<T>(0, 0, 1);
 
 template<typename T>
-const Vector3<T> Vector3<T>::RightVector = Vector3<T>(0, 1, 0);
+const Vector3<T> Vector3<T>::RightVector = Vector3<T>(1, 0, 0);
 
 
 typedef Vector3<float> Vector3f;
