@@ -32,6 +32,11 @@ public:
 		return cosf(Value);
 	}
 
+	static float Tan(float Value)
+	{
+		return tan(Value);
+	}
+
 	static void SinCos(float* SinRes, float* CosRes, float Value)
 	{
 		*SinRes = Sin(Value);

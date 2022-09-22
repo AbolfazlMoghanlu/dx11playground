@@ -147,8 +147,8 @@ bool Window::IsRightClickDown() const
 float Window::GetRightValue() const
 {
 	float RightValue = 0.0f;
-	RightValue += GetKeyState(VK_RIGHT) & 128 ? 1.0f : 0.0f;
-	RightValue += GetKeyState(VK_LEFT) & 128 ? -1.0f : 0.0f;
+	RightValue += GetKeyState('D') & 128 ? 1.0f : 0.0f;
+	RightValue += GetKeyState('A') & 128 ? -1.0f : 0.0f;
 
 	return RightValue;
 }
@@ -156,8 +156,8 @@ float Window::GetRightValue() const
 float Window::GetUpValue() const
 {
 	float UpValue = 0.0f;
-	UpValue += GetKeyState(VK_UP) & 128 ? 1.0f : 0.0f;
-	UpValue += GetKeyState(VK_DOWN) & 128 ? -1.0f : 0.0f;
+	UpValue += GetKeyState('W') & 128 ? 1.0f : 0.0f;
+	UpValue += GetKeyState('S') & 128 ? -1.0f : 0.0f;
 
 	return UpValue;
 }

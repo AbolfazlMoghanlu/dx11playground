@@ -6,7 +6,7 @@
 
 Rotatorf CameraRotation = Rotatorf(0.0f);
 const float MouseSpeed = 500.0f;
-const float CameraSpeed = 100.0f;
+const float CameraSpeed = 0.1f;
 
 Vector3f CameraPosition = Vector3f(0.0f);
 
@@ -207,6 +207,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	{
 		Matrix<float> TransformMatrix;
 		Matrix<float> ViewMatrix;
+		Matrix<float> ProjectionMatrix;
 	};
 
 	D3D11_BUFFER_DESC VsConstantBufferDesc;
@@ -279,13 +280,26 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	{
 		if (MainWindow.IsRightClickDown())
 		{
-			Rotatorf DeltaRotation = Rotatorf(MouseSpeed * MainWindow.MouseDeltaY, MouseSpeed * MainWindow.MouseDeltaX, 0.0f);
+			float CameraPitchOffset = MouseSpeed * -MainWindow.MouseDeltaY;
+			float CameraYawOffset = MouseSpeed * MainWindow.MouseDeltaX;
+
+			Rotatorf DeltaRotation = Rotatorf(CameraPitchOffset, CameraYawOffset, 0.0f);
 			CameraRotation = Rotatorf::CombineRotators(CameraRotation, DeltaRotation);
+
+			float CameraPitchClamped = CameraRotation.Pitch < 180.0f ?
+				Math::Clamp<float>(CameraRotation.Pitch, 1.0f, 89.0f) : Math::Clamp<float>(CameraRotation.Pitch, 271.0f, 359.0f);
+
+			CameraRotation = Rotatorf(CameraPitchClamped, CameraRotation.Yaw, CameraRotation.Roll);
 		}
 		std::cout << CameraRotation.ToString() << std::endl;
 
+		Vector3f CameraForwardVector = CameraRotation.Vector();
+		Vector3f CameraRightVector = Vector3f::CrossProduct(Vector3f::UpVector, CameraForwardVector);
 
-		CameraPosition += Vector3f(MainWindow.GetRightValue() * CameraSpeed, MainWindow.GetUpValue() * CameraSpeed, 0.0f);
+		Vector3f CameraForwardOffset = CameraForwardVector * MainWindow.GetUpValue() * CameraSpeed;
+		Vector3f CameraRightOffset = CameraRightVector * MainWindow.GetRightValue() * CameraSpeed;
+
+		CameraPosition = CameraPosition + CameraForwardOffset + CameraRightOffset;
 		std::cout << CameraPosition.ToString() << std::endl;
 		
 		MainWindow.Tick(1);
@@ -301,15 +315,15 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float TimeSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(Now.time_since_epoch()).count();
 		
 
-		Matrix<float> TransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0, 0.0, 0.5f), Vector3f(0.25f));
-
-		Vector3f CameraForwardVector = CameraRotation.Vector();
+		Matrix<float> TransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 0.0, 0.5f), Vector3f(0.25f));
 
 		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 
+		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f, 640.0f/480.0f, 0.1f, 100.0f);
 
 		VsConstantBL.TransformMatrix = TransformMatrix;
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
+		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
 		VSConstantData.pSysMem = &VsConstantBL;
 		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
 

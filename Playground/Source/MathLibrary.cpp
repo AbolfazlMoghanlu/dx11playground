@@ -60,10 +60,10 @@ Matrix<float> Math::LookAt(const Vector3f Eye, const Vector3f& CameraForwardVect
 
 	Matrix<float> Mat;
 
-	Mat.M[0][0] = XAxis.X;	Mat.M[0][1] = YAxis.X;	Mat.M[0][2] = ZAxis.X;	Mat.M[0][3] = 0;
-	Mat.M[1][0] = XAxis.Y;	Mat.M[1][1] = YAxis.Y;	Mat.M[1][2] = ZAxis.Y;	Mat.M[1][3] = 0;
-	Mat.M[2][0] = XAxis.Z;	Mat.M[2][1] = YAxis.Z;	Mat.M[2][2] = ZAxis.Z;	Mat.M[2][3] = 0;
-	Mat.M[2][0] = XDis;		Mat.M[3][1] = YDis;		Mat.M[3][2] = ZDis;		Mat.M[3][3] = 1;
+	Mat.M[0][0] = XAxis.X;	Mat.M[0][1] = YAxis.X;	Mat.M[0][2] = ZAxis.X;	Mat.M[0][3] = 0.0f;
+	Mat.M[1][0] = XAxis.Y;	Mat.M[1][1] = YAxis.Y;	Mat.M[1][2] = ZAxis.Y;	Mat.M[1][3] = 0.0f;
+	Mat.M[2][0] = XAxis.Z;	Mat.M[2][1] = YAxis.Z;	Mat.M[2][2] = ZAxis.Z;	Mat.M[2][3] = 0.0f;
+	Mat.M[3][0] = XDis;		Mat.M[3][1] = YDis;		Mat.M[3][2] = ZDis;		Mat.M[3][3] = 1.0f;
 
 	return Mat;
 }
