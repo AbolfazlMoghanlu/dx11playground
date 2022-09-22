@@ -28,7 +28,7 @@ public:
 	float GetUpValue() const;
 
 protected:
-	virtual LRESULT HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam);
+	virtual LRESULT HandleMessege(HWND Handle, UINT msg, WPARAM Wparam, LPARAM Lparam);
 
 private:
 	static LRESULT CALLBACK SetupWindowProc(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam);

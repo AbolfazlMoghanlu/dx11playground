@@ -7,6 +7,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#include "Imgui/imgui.h"
+#include "imgui/backends/imgui_impl_dx11.h"
+#include "imgui/backends/imgui_impl_win32.h"
+
 Rotatorf CameraRotation = Rotatorf(0.0f);
 const float MouseSpeed = 500.0f;
 const float CameraSpeed = 100.0f;
@@ -402,8 +406,27 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	// -------------------------------------------------------------------
 
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	(void)io;
+
+	ImGui::StyleColorsDark();
+
+	ImGui_ImplWin32_Init(MainWindow.GetHandle());
+	ImGui_ImplDX11_Init(Device.Get(), DeviceContext.Get());
+
+	bool show_demo_window = true;
+
+	// -------------------------------------------------------------------
+
 	while (MainWindow.IsOpen())
 	{
+		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
+		DeviceContext->ClearDepthStencilView(DepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+
+		// ----------------------------------------------------------------
+
 		if (MainWindow.IsRightClickDown())
 		{
 			float CameraPitchOffset = MouseSpeed * -MainWindow.MouseDeltaY;
@@ -429,9 +452,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		std::cout << CameraPosition.ToString() << std::endl;
 		
 		MainWindow.Tick(1);
-
-		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
-		DeviceContext->ClearDepthStencilView(DepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 		// ----------------------------------------------------------------
 
@@ -496,8 +516,34 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		// -----------------------------------------------------------------
 
+		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
+
+		// 		if (show_demo_window)
+		// 			ImGui::ShowDemoWindow(&show_demo_window);
+
+		bool show_another_window = true;
+
+		ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
+		ImGui::Text("Hello from another window!");
+		if (ImGui::Button("Close Me"))
+			show_another_window = false;
+		ImGui::End();
+
+
+		ImGui::Render();
+		DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), NULL);
+		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+		// -----------------------------------------------------------------
+
 		SwapChain->Present(1, 0);
 	}
+
+	ImGui_ImplDX11_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
 
 	VertexShader.Reset();
 	VertexShaderBlob.Reset();

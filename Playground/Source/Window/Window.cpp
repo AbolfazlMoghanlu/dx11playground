@@ -1,5 +1,8 @@
 #include "pch.h"
 #include "Window.h"
+#include "Imgui/imgui.h"
+#include "Imgui/backends/imgui_impl_win32.h"
+#include "Imgui/backends/imgui_impl_dx11.h"
 
 #define WINDOW_CLASS_NAME L"DX11Playground"
 
@@ -162,8 +165,13 @@ float Window::GetUpValue() const
 	return UpValue;
 }
 
-LRESULT Window::HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lparam)
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+LRESULT Window::HandleMessege(HWND Handle, UINT msg, WPARAM Wparam, LPARAM Lparam)
 {
+	if (ImGui_ImplWin32_WndProcHandler(Handle, msg, Wparam, Lparam))
+		return true;
+
 	switch (msg)
 	{
 	case WM_CLOSE:
@@ -191,5 +199,5 @@ LRESULT Window::HandleMessege(HWND Hanlde, UINT msg, WPARAM Wparam, LPARAM Lpara
 
 	}
 
-	return DefWindowProc(Hanlde, msg, Wparam, Lparam);
+	return DefWindowProc(Handle, msg, Wparam, Lparam);
 }

@@ -46,8 +46,12 @@ project "playground"
 	includedirs
 	{
 		"%{prj.name}/Source",
+		"%{prj.name}/Source/imgui",
 		"ThirdParty/Header"
 	}
+	
+	filter "files:**/imgui/**"
+		flags {"NoPCH"}
 
 --	filter("files:**.hlsl")
 --		  flags("ExcludeFromBuild")
