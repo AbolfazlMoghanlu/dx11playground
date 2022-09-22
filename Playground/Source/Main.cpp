@@ -9,7 +9,7 @@
 
 Rotatorf CameraRotation = Rotatorf(0.0f);
 const float MouseSpeed = 500.0f;
-const float CameraSpeed = 0.1f;
+const float CameraSpeed = 100.0f;
 
 Vector3f CameraPosition = Vector3f(0.0f);
 
@@ -249,6 +249,27 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	// -----------------------------------------------
 
+	struct PSContantBufferLayout
+	{
+		Vector3f CameraPosition;
+		float UselessData = 1.0f;
+	};
+
+	D3D11_BUFFER_DESC PsConstantBufferDesc;
+	PsConstantBufferDesc.ByteWidth = sizeof(PSContantBufferLayout);
+	PsConstantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	PsConstantBufferDesc.CPUAccessFlags = false;
+	PsConstantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	PsConstantBufferDesc.MiscFlags = 0;
+	PsConstantBufferDesc.StructureByteStride = 0;
+
+	D3D11_SUBRESOURCE_DATA PSConstantData;
+
+	PSContantBufferLayout PsConstantBL;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> PsConstantBuffer;
+
+	// -----------------------------------------------
+
 	D3D11_TEXTURE2D_DESC DepthDesc;
 	DepthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	DepthDesc.Width = 640;
@@ -357,6 +378,30 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	Device->CreateSamplerState(&CoverageSamplerDesc, &CoverageSamplerState);
 
+	// ------------------------------------------------------------------
+	
+	D3D11_RENDER_TARGET_BLEND_DESC TargetBlendDesc;
+	TargetBlendDesc.BlendEnable = true;
+	TargetBlendDesc.SrcBlend = D3D11_BLEND_SRC_ALPHA;
+	TargetBlendDesc.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+	TargetBlendDesc.BlendOp = D3D11_BLEND_OP_ADD;
+	TargetBlendDesc.SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
+	TargetBlendDesc.DestBlendAlpha = D3D11_BLEND_DEST_ALPHA;
+	TargetBlendDesc.BlendOpAlpha = D3D11_BLEND_OP_ADD;
+	TargetBlendDesc.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+
+	D3D11_BLEND_DESC BlendDesc;
+	BlendDesc.AlphaToCoverageEnable = false;
+	BlendDesc.IndependentBlendEnable = false;
+	BlendDesc.RenderTarget[0] = TargetBlendDesc;
+
+	Microsoft::WRL::ComPtr<ID3D11BlendState> BlendState;
+	Device->CreateBlendState(&BlendDesc, &BlendState);
+
+	DeviceContext->OMSetBlendState(BlendState.Get(), NULL, 0xffffffff);
+
+	// -------------------------------------------------------------------
+
 	while (MainWindow.IsOpen())
 	{
 		if (MainWindow.IsRightClickDown())
@@ -438,6 +483,14 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		DeviceContext->PSSetShaderResources(0, 1, CoverageTextureResourceView.GetAddressOf());
 		DeviceContext->PSSetSamplers(0, 1, CoverageSamplerState.GetAddressOf());
+
+
+
+		PsConstantBL.CameraPosition = CameraPosition;
+		PSConstantData.pSysMem = &PsConstantBL;
+
+		Device->CreateBuffer(&PsConstantBufferDesc, &PSConstantData, &PsConstantBuffer);
+		DeviceContext->PSSetConstantBuffers(0, 1, PsConstantBuffer.GetAddressOf());
 
 		DeviceContext->DrawIndexed(6, 0, 0);
 
