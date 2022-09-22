@@ -11,6 +11,9 @@
 #include "imgui/backends/imgui_impl_dx11.h"
 #include "imgui/backends/imgui_impl_win32.h"
 
+const int WindowWidth = 1080; 
+const int WindowHeight = 720; 
+
 Rotatorf CameraRotation = Rotatorf(0.0f);
 const float MouseSpeed = 500.0f;
 const float CameraSpeed = 100.0f;
@@ -22,7 +25,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 {
 	Window::Startup();
 
-	Window MainWindow(L"DxWindow", 640, 480);
+	Window MainWindow(L"DxWindow", WindowWidth, WindowHeight);
 
 
 	AllocConsole();
@@ -37,8 +40,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> DeviceContext;
 
 	DXGI_SWAP_CHAIN_DESC SwapChainDesc;
-	SwapChainDesc.BufferDesc.Width = 640;
-	SwapChainDesc.BufferDesc.Height = 480;
+	SwapChainDesc.BufferDesc.Width = WindowWidth;
+	SwapChainDesc.BufferDesc.Height = WindowHeight;
 	SwapChainDesc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
 	SwapChainDesc.BufferDesc.RefreshRate.Numerator = 0;
 	SwapChainDesc.BufferDesc.RefreshRate.Denominator = 0;
@@ -220,8 +223,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	// ------------------------------------------------
 
 	D3D11_VIEWPORT ViewportDesc;
-	ViewportDesc.Width = 640;
-	ViewportDesc.Height = 480;
+	ViewportDesc.Width = WindowWidth;
+	ViewportDesc.Height = WindowHeight;
 	ViewportDesc.MinDepth = 0.0f;
 	ViewportDesc.MaxDepth = 1.0f;
 	ViewportDesc.TopLeftX = 0.0f;
@@ -274,10 +277,36 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	// -----------------------------------------------
 
+	struct PCloudBufferLayout
+	{
+		Vector3f CloudColor = Vector3f(1.0f, 1.0f, 1.0f);
+		int Steps = 64;
+		float Height = 5000.0f;
+		float CoveragemapScale = 50000.0f;
+		float Useless1 = 0.0f;
+		float Useless2 = 0.0f;
+	};
+
+	D3D11_BUFFER_DESC PsCloudBufferDesc;
+	PsCloudBufferDesc.ByteWidth = sizeof(PCloudBufferLayout);
+	PsCloudBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	PsCloudBufferDesc.CPUAccessFlags = false;
+	PsCloudBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	PsCloudBufferDesc.MiscFlags = 0;
+	PsCloudBufferDesc.StructureByteStride = 0;
+
+	D3D11_SUBRESOURCE_DATA PSCloudData;
+
+	PCloudBufferLayout PsCloudBL;
+	Microsoft::WRL::ComPtr<ID3D11Buffer> PsCloudBuffer;
+
+	// -----------------------------------------------
+
+
 	D3D11_TEXTURE2D_DESC DepthDesc;
 	DepthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	DepthDesc.Width = 640;
-	DepthDesc.Height = 480;
+	DepthDesc.Width = WindowWidth;
+	DepthDesc.Height = WindowHeight;
 	DepthDesc.MipLevels = 1;
 	DepthDesc.CPUAccessFlags = false;
 	DepthDesc.MiscFlags = 0;
@@ -462,7 +491,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 
-		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f, 640.0f/480.0f, 1.0f, 50000.0f);
+		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
+			(float)WindowWidth/(float)WindowHeight, 1.0f, 50000.0f);
 
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
 		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
@@ -505,12 +535,16 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		DeviceContext->PSSetSamplers(0, 1, CoverageSamplerState.GetAddressOf());
 
 
-
 		PsConstantBL.CameraPosition = CameraPosition;
 		PSConstantData.pSysMem = &PsConstantBL;
 
 		Device->CreateBuffer(&PsConstantBufferDesc, &PSConstantData, &PsConstantBuffer);
 		DeviceContext->PSSetConstantBuffers(0, 1, PsConstantBuffer.GetAddressOf());
+
+
+		PSCloudData.pSysMem = &PsCloudBL;
+		Device->CreateBuffer(&PsCloudBufferDesc, &PSCloudData, &PsCloudBuffer);
+		DeviceContext->PSSetConstantBuffers(1, 1, PsCloudBuffer.GetAddressOf());
 
 		DeviceContext->DrawIndexed(6, 0, 0);
 
@@ -525,10 +559,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		bool show_another_window = true;
 
-		ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-		ImGui::Text("Hello from another window!");
-		if (ImGui::Button("Close Me"))
-			show_another_window = false;
+		ImGui::Begin("Setting", &show_another_window, ImGuiWindowFlags_::ImGuiWindowFlags_NoTitleBar);
+
+		ImGui::ColorEdit3("CloudColor", &PsCloudBL.CloudColor.X);
+		ImGui::SliderInt("Steps", &PsCloudBL.Steps, 2, 256);
+		ImGui::SliderFloat("Height", &PsCloudBL.Height, 1000.0f, 10000.0f, "%0f");
+		ImGui::SliderFloat("CoverageScale", &PsCloudBL.CoveragemapScale, 1000.0f, 100000.0f, "%0f");
+
 		ImGui::End();
 
 
