@@ -49,6 +49,19 @@ project "playground"
 		"ThirdParty/Header"
 	}
 
+--	filter("files:**.hlsl")
+--		  flags("ExcludeFromBuild")
+--		  shaderobjectfileoutput(shader_dir.."%{file.basename}"..".cso")
+--		  shaderassembleroutput(shader_dir.."%{file.basename}"..".asm")
+
+	filter("files:**_ps.hlsl")
+		removeflags("ExcludeFromBuild")
+		shadertype("Pixel")
+
+   filter("files:**_vs.hlsl")
+		removeflags("ExcludeFromBuild")
+		shadertype("Vertex")
+
 	filter "configurations:Debug"
 		defines
 		{

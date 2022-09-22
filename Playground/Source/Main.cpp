@@ -142,7 +142,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	Microsoft::WRL::ComPtr<ID3D11VertexShader> VertexShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> VertexShaderBlob;
 
-	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/VertexShader.cso", VertexShaderBlob.GetAddressOf());
+	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/VertexShader_vs.cso", VertexShaderBlob.GetAddressOf());
 	Device->CreateVertexShader(VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), nullptr, &VertexShader);
 
 	DeviceContext->VSSetShader(VertexShader.Get(), 0, 0);
@@ -195,7 +195,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> PixelShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> PixelShaderBlob;
 
-	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/PixelShader.cso", &PixelShaderBlob);
+	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/PixelShader_ps.cso", &PixelShaderBlob);
 	Device->CreatePixelShader(PixelShaderBlob->GetBufferPointer(), PixelShaderBlob->GetBufferSize(), nullptr, &PixelShader);
 
 	// ------------------------------------------------
@@ -203,7 +203,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> SkyPixelShader;
 	Microsoft::WRL::ComPtr<ID3DBlob> SkyPixelShaderBlob;
 
-	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/SkyPixelShader.cso", &SkyPixelShaderBlob);
+	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/SkyPixelShader_ps.cso", &SkyPixelShaderBlob);
 	Device->CreatePixelShader(SkyPixelShaderBlob->GetBufferPointer(), SkyPixelShaderBlob->GetBufferSize(), nullptr, &SkyPixelShader);
 
 	// ------------------------------------------------
