@@ -61,10 +61,12 @@ project "playground"
 	filter("files:**_ps.hlsl")
 		removeflags("ExcludeFromBuild")
 		shadertype("Pixel")
+		shadermodel("4.0")	
 
    filter("files:**_vs.hlsl")
 		removeflags("ExcludeFromBuild")
 		shadertype("Vertex")
+		shadermodel("4.0")	
 
 	filter "configurations:Debug"
 		defines
