@@ -78,22 +78,22 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float B;
 	};
 
-// 	const Vertex vertecies[] = 
-// 	{
-// 		{0.5f, 0.5f, 0.2f,		1.0f, 1.0f, 1.0f},
-// 		{-0.5f, -0.5f, 0.2f,	1.0f, 0.0f, 0.0f},
-// 		{0.5f, -0.5f, 0.2f,		0.0f, 1.0f, 0.0f},
-// 		{-0.5f, 0.5f, 0.2f,		0.0f, 0.0f, 1.0f},
-// 	};
-// 
-// 	const unsigned short int Indices[] =
-// 	{
-// 		0, 2, 1,
-// 		0, 1, 3
-// 	};
+	const Vertex SkyVertecies[] = 
+	{
+		{0.5f, 0.0f, 0.5f,		1.0f, 1.0f, 1.0f},
+		{0.5f, 0.0f, -0.5f,		1.0f, 0.0f, 0.0f},
+		{-0.5f, 0.0f, 0.5f,		0.0f, 1.0f, 0.0f},
+		{-0.5f, 0.0f, -0.5f,	0.0f, 0.0f, 1.0f}
+	};
+
+	const unsigned short int SkyIndices[] =
+	{
+		2, 1, 0,
+		2, 3, 1
+	};
 
 
-	const Vertex vertecies[] = 
+	const Vertex CubeVertecies[] = 
 	{
 		 {0.5 , 0.5  ,-0.5 ,		1.0f, 1.0f, 1.0f},	//0
 		 {0.5 , -0.5 ,-0.5 ,		1.0f, 0.0f, 0.0f},	//1
@@ -105,14 +105,14 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		 {-0.5,  -0.5, 0.5 ,		0.0f, 0.0f, 1.0f}	//7
 	};
 
-	const unsigned short int Indices[] =
+	const unsigned short int CubeIndices[] =
 	{
 		4, 0, 1, 4, 1, 5, // front
 		6, 2, 0, 6, 0, 4, // top
 		0, 2, 3, 0, 3, 1, // right
 		6, 4, 5, 6, 5, 7, // left
 		5, 1, 3, 5, 3, 7, // bottom
-		6, 2, 3, 6, 3, 7  // back
+		6, 3, 2, 6, 7, 3  // back
 	};
 
 	Microsoft::WRL::ComPtr<ID3D11Buffer> VertexBuffer;
@@ -121,17 +121,21 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	VertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 	VertexBufferDesc.CPUAccessFlags = false;
 	VertexBufferDesc.MiscFlags = 0;
-	VertexBufferDesc.ByteWidth = sizeof(vertecies);
+	VertexBufferDesc.ByteWidth = sizeof(CubeVertecies);
 	VertexBufferDesc.StructureByteStride = sizeof(Vertex);
 
+	Microsoft::WRL::ComPtr<ID3D11Buffer> SkyVertexBuffer;
+	D3D11_BUFFER_DESC SkyVertexBufferDesc = VertexBufferDesc;
+	SkyVertexBufferDesc.ByteWidth = sizeof(SkyVertecies);
+
 	D3D11_SUBRESOURCE_DATA VertexDataDesc;
-	VertexDataDesc.pSysMem = vertecies;
+	VertexDataDesc.pSysMem = CubeVertecies;
+
+	D3D11_SUBRESOURCE_DATA SkyVertexDataDesc;
+	SkyVertexDataDesc.pSysMem = SkyVertecies;
 
 	Device->CreateBuffer(&VertexBufferDesc, &VertexDataDesc, &VertexBuffer);
-
-	const UINT stride = sizeof(Vertex);
-	const UINT offset = 0;
-	DeviceContext->IASetVertexBuffers(0, 1, VertexBuffer.GetAddressOf(), &stride, &offset);
+	Device->CreateBuffer(&SkyVertexBufferDesc, &SkyVertexDataDesc, &SkyVertexBuffer);
 
 	// ------------------------------------------------
 
@@ -146,6 +150,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	// ------------------------------------------------
 
 	Microsoft::WRL::ComPtr<ID3D11InputLayout> VertexInputLayout;
+	Microsoft::WRL::ComPtr<ID3D11InputLayout> SkyVertexInputLayout;
+
 	const D3D11_INPUT_ELEMENT_DESC VertexInputElementDesc[] =
 	{
 		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
@@ -154,26 +160,36 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	Device->CreateInputLayout(VertexInputElementDesc, (UINT)std::size(VertexInputElementDesc),
 		VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), VertexInputLayout.GetAddressOf());
-
-	DeviceContext->IASetInputLayout(VertexInputLayout.Get());
+		
+	Device->CreateInputLayout(VertexInputElementDesc, (UINT)std::size(VertexInputElementDesc),
+		VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), SkyVertexInputLayout.GetAddressOf());
 
 	// ------------------------------------------------
 
 	D3D11_BUFFER_DESC IndexBufferDesc;
 	IndexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	IndexBufferDesc.ByteWidth = sizeof(Indices);
+	IndexBufferDesc.ByteWidth = sizeof(CubeIndices);
 	IndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	IndexBufferDesc.CPUAccessFlags = false;
 	IndexBufferDesc.MiscFlags = 0;
 	IndexBufferDesc.StructureByteStride = sizeof(unsigned short int);
 
+	D3D11_BUFFER_DESC SkyIndexBufferDesc;
+	SkyIndexBufferDesc = IndexBufferDesc;
+	SkyIndexBufferDesc.ByteWidth = sizeof(SkyIndices);
+
 	D3D11_SUBRESOURCE_DATA IndexData;
-	IndexData.pSysMem = Indices;
+	IndexData.pSysMem = CubeIndices;
+
+	D3D11_SUBRESOURCE_DATA SkyIndexData;
+	SkyIndexData.pSysMem = SkyIndices;
 
 	Microsoft::WRL::ComPtr<ID3D11Buffer> IndexBuffer;
 	Device->CreateBuffer(&IndexBufferDesc, &IndexData, &IndexBuffer);
 
-	DeviceContext->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+	Microsoft::WRL::ComPtr<ID3D11Buffer> SkyIndexBuffer;
+	Device->CreateBuffer(&SkyIndexBufferDesc, &SkyIndexData, &SkyIndexBuffer);
+
 
 	// ------------------------------------------------
 	Microsoft::WRL::ComPtr<ID3D11PixelShader> PixelShader;
@@ -182,8 +198,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/PixelShader.cso", &PixelShaderBlob);
 	Device->CreatePixelShader(PixelShaderBlob->GetBufferPointer(), PixelShaderBlob->GetBufferSize(), nullptr, &PixelShader);
 
-	DeviceContext->PSSetShader(PixelShader.Get(), 0, 0);
-	//DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), nullptr);
+	// ------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11PixelShader> SkyPixelShader;
+	Microsoft::WRL::ComPtr<ID3DBlob> SkyPixelShaderBlob;
+
+	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/SkyPixelShader.cso", &SkyPixelShaderBlob);
+	Device->CreatePixelShader(SkyPixelShaderBlob->GetBufferPointer(), SkyPixelShaderBlob->GetBufferSize(), nullptr, &SkyPixelShader);
 
 	// ------------------------------------------------
 
@@ -313,25 +334,51 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		auto Now =  Time.now();
 
 		float TimeSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(Now.time_since_epoch()).count();
-		
-
-		Matrix<float> TransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 0.0, 0.5f), Vector3f(0.25f));
 
 		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 
 		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f, 640.0f/480.0f, 0.1f, 100.0f);
 
-		VsConstantBL.TransformMatrix = TransformMatrix;
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
 		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
-		VSConstantData.pSysMem = &VsConstantBL;
-		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
-
-		DeviceContext->VSSetConstantBuffers(0, 1, VsConstantBuffer.GetAddressOf());
 
 		// ----------------------------------------------------------------
 
+		const UINT stride = sizeof(Vertex);
+		const UINT offset = 0;
+		DeviceContext->IASetVertexBuffers(0, 1, VertexBuffer.GetAddressOf(), &stride, &offset);
+		DeviceContext->IASetInputLayout(VertexInputLayout.Get());
+		DeviceContext->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+		Matrix<float> CubeTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 0.0, 0.5f), Vector3f(0.25f));
+		VsConstantBL.TransformMatrix = CubeTransformMatrix;
+
+		VSConstantData.pSysMem = &VsConstantBL;
+		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
+		DeviceContext->VSSetConstantBuffers(0, 1, VsConstantBuffer.GetAddressOf());
+
+		DeviceContext->PSSetShader(PixelShader.Get(), 0, 0);
+
 		DeviceContext->DrawIndexed(36, 0, 0);
+
+		// -----------------------------------------------------------------
+
+		DeviceContext->IASetVertexBuffers(0, 1, SkyVertexBuffer.GetAddressOf(), &stride, &offset);
+		DeviceContext->IASetInputLayout(SkyVertexInputLayout.Get());
+		DeviceContext->IASetIndexBuffer(SkyIndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+
+		Matrix<float> SkyTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 10.0, 0.0f), Vector3f(100.0f));
+		VsConstantBL.TransformMatrix = SkyTransformMatrix;
+
+		VSConstantData.pSysMem = &VsConstantBL;
+		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
+		DeviceContext->VSSetConstantBuffers(0, 1, VsConstantBuffer.GetAddressOf());
+
+		DeviceContext->PSSetShader(SkyPixelShader.Get(), 0, 0);
+
+		DeviceContext->DrawIndexed(6, 0, 0);
+
+		// -----------------------------------------------------------------
 
 		SwapChain->Present(1, 0);
 	}
