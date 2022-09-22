@@ -4,6 +4,9 @@
 #include "Window/Window.h"
 #include <time.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 Rotatorf CameraRotation = Rotatorf(0.0f);
 const float MouseSpeed = 500.0f;
 const float CameraSpeed = 0.1f;
@@ -297,6 +300,63 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	DeviceContext->OMSetDepthStencilState(DepthState.Get(), 128);
 
+	// -----------------------------------------------------------------------
+
+	unsigned char* CoverageTextureBlob;
+	int CoverageImageWidth, CoverageImageHeight, CoverageImageNumberOfChannels;
+
+	CoverageTextureBlob = stbi_load("../Content/T_WeatherNoiseBetter.png",
+		&CoverageImageWidth, &CoverageImageHeight, &CoverageImageNumberOfChannels, 0);
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> CoverageTexture;
+	
+	D3D11_TEXTURE2D_DESC CoverageTextureDescription;
+	CoverageTextureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	CoverageTextureDescription.Height = CoverageImageHeight;
+	CoverageTextureDescription.Width = CoverageImageWidth;
+	CoverageTextureDescription.ArraySize = 1;
+	CoverageTextureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	CoverageTextureDescription.CPUAccessFlags = 0;
+	CoverageTextureDescription.MiscFlags = 0;
+	CoverageTextureDescription.SampleDesc.Count = 1;
+	CoverageTextureDescription.SampleDesc.Quality = 0;
+	CoverageTextureDescription.Usage = D3D11_USAGE_DEFAULT;
+	CoverageTextureDescription.MipLevels = 1;
+
+	D3D11_SUBRESOURCE_DATA CoverageTextureData;
+	CoverageTextureData.pSysMem = CoverageTextureBlob;
+	CoverageTextureData.SysMemPitch = sizeof(char) * CoverageImageNumberOfChannels * CoverageImageWidth;
+	
+	Device->CreateTexture2D(&CoverageTextureDescription, &CoverageTextureData, &CoverageTexture);
+
+	// ----------------------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> CoverageTextureResourceView;
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC CoverageTextureResourceViewDesc;
+	CoverageTextureResourceViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	CoverageTextureResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	CoverageTextureResourceViewDesc.Texture2D.MipLevels = 1;
+	CoverageTextureResourceViewDesc.Texture2D.MostDetailedMip = 0;
+
+	Device->CreateShaderResourceView(CoverageTexture.Get(), &CoverageTextureResourceViewDesc, &CoverageTextureResourceView);
+
+	// -----------------------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11SamplerState> CoverageSamplerState;
+
+	D3D11_SAMPLER_DESC CoverageSamplerDesc;
+	CoverageSamplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	CoverageSamplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	CoverageSamplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	CoverageSamplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	CoverageSamplerDesc.MaxAnisotropy = 16;
+	CoverageSamplerDesc.MinLOD = 0;
+	CoverageSamplerDesc.MaxLOD = 1;
+	CoverageSamplerDesc.MipLODBias = 0;
+
+	Device->CreateSamplerState(&CoverageSamplerDesc, &CoverageSamplerState);
+
 	while (MainWindow.IsOpen())
 	{
 		if (MainWindow.IsRightClickDown())
@@ -337,7 +397,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 
-		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f, 640.0f/480.0f, 0.1f, 100.0f);
+		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f, 640.0f/480.0f, 1.0f, 50000.0f);
 
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
 		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
@@ -350,7 +410,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		DeviceContext->IASetInputLayout(VertexInputLayout.Get());
 		DeviceContext->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
 
-		Matrix<float> CubeTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 0.0, 0.5f), Vector3f(0.25f));
+		Matrix<float> CubeTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 0.0, 5.0f), Vector3f(1.0f));
 		VsConstantBL.TransformMatrix = CubeTransformMatrix;
 
 		VSConstantData.pSysMem = &VsConstantBL;
@@ -367,7 +427,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		DeviceContext->IASetInputLayout(SkyVertexInputLayout.Get());
 		DeviceContext->IASetIndexBuffer(SkyIndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
 
-		Matrix<float> SkyTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 10.0, 0.0f), Vector3f(100.0f));
+		Matrix<float> SkyTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 5000.0, 0.0f), Vector3f(100000.0f));
 		VsConstantBL.TransformMatrix = SkyTransformMatrix;
 
 		VSConstantData.pSysMem = &VsConstantBL;
@@ -375,6 +435,9 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		DeviceContext->VSSetConstantBuffers(0, 1, VsConstantBuffer.GetAddressOf());
 
 		DeviceContext->PSSetShader(SkyPixelShader.Get(), 0, 0);
+
+		DeviceContext->PSSetShaderResources(0, 1, CoverageTextureResourceView.GetAddressOf());
+		DeviceContext->PSSetSamplers(0, 1, CoverageSamplerState.GetAddressOf());
 
 		DeviceContext->DrawIndexed(6, 0, 0);
 
