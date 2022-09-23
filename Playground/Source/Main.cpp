@@ -280,11 +280,22 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	struct PCloudBufferLayout
 	{
 		Vector3f CloudColor = Vector3f(1.0f, 1.0f, 1.0f);
+		float StartZ = 10000.0f;
+
 		int Steps = 64;
 		float Height = 5000.0f;
+		float Coverage = 0.7f;
 		float CoveragemapScale = 50000.0f;
+
+		float DensityScale = 1.0f;
+		float BottomRoundness = 0.07f;
+		float TopRoundness = 0.2f;
+		float BottomDensity = 0.15f;
+
+		float TopDensity = 0.9f;
 		float Useless1 = 0.0f;
 		float Useless2 = 0.0f;
+		float Useless3 = 0.0f;
 	};
 
 	D3D11_BUFFER_DESC PsCloudBufferDesc;
@@ -492,7 +503,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 
 		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
-			(float)WindowWidth/(float)WindowHeight, 1.0f, 50000.0f);
+			(float)WindowWidth/(float)WindowHeight, 100.0f, 1000000.0f);
 
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
 		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
@@ -522,7 +533,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		DeviceContext->IASetInputLayout(SkyVertexInputLayout.Get());
 		DeviceContext->IASetIndexBuffer(SkyIndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
 
-		Matrix<float> SkyTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 5000.0, 0.0f), Vector3f(100000.0f));
+		Matrix<float> SkyTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, PsCloudBL.StartZ, 0.0f), Vector3f(1000000.0f));
 		VsConstantBL.TransformMatrix = SkyTransformMatrix;
 
 		VSConstantData.pSysMem = &VsConstantBL;
@@ -563,8 +574,15 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		ImGui::ColorEdit3("CloudColor", &PsCloudBL.CloudColor.X);
 		ImGui::SliderInt("Steps", &PsCloudBL.Steps, 2, 256);
-		ImGui::SliderFloat("Height", &PsCloudBL.Height, 1000.0f, 10000.0f, "%0f");
-		ImGui::SliderFloat("CoverageScale", &PsCloudBL.CoveragemapScale, 1000.0f, 100000.0f, "%0f");
+		ImGui::SliderFloat("Coverage", &PsCloudBL.Coverage, 0.0f, 2.0f, "%1f");
+		ImGui::SliderFloat("CoverageScale", &PsCloudBL.CoveragemapScale, 1000.0f, 1000000.0f, "%1f");
+		ImGui::SliderFloat("StartZ", &PsCloudBL.StartZ, 1000.0f, 100000.0f, "%1f");
+		ImGui::SliderFloat("Height", &PsCloudBL.Height, 1000.0f, 100000.0f, "%1f");
+		ImGui::SliderFloat("DensityScale", &PsCloudBL.DensityScale, 0.0f, 2.0f, "%1f");
+		ImGui::SliderFloat("BottomRoundness", &PsCloudBL.BottomRoundness, 0.0f, 1.0f, "%1f");
+		ImGui::SliderFloat("TopRoundness", &PsCloudBL.TopRoundness, 0.0f, 1.0f, "%1f");
+		ImGui::SliderFloat("BottomDensity", &PsCloudBL.BottomDensity, 0.0f, 1.0f, "%1f");
+		ImGui::SliderFloat("TopDensity", &PsCloudBL.TopDensity, 0.0f, 1.0f, "%1f");
 
 		ImGui::End();
 
