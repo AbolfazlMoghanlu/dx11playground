@@ -17,16 +17,17 @@ cbuffer PCloudBufferLayout : register(b1)
 	float DensityScale;
 	float BottomRoundness;
 	float TopRoundness;
-	float BottomDensity = 0.15f;
+	float BottomDensity;
 
-	float TopDensity = 0.9f;
-	float HNoiseScale;
-	float Useless2;
+	float TopDensity;
+	float BaseNoiseScale;
+	float DetailNoiseScale;
 	float Useless3;
 };
 
 Texture2D<float4> CoverageTexture : register(t0);
 Texture3D<float4> WorleyTexture : register(t1);
+Texture3D<float4> WorleyDetailTexture : register(t2);
 SamplerState CoverageTextureSampler: register(s0);
 
 
@@ -68,13 +69,16 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 		float DensityOverZTop = saturate(Remap(ZGradient, TopDensity, 1.0f, 1.0f, 0.0f));
 		float DA = DensityOverZBottom * DensityOverZTop;
 		
-		float4 Worley = WorleyTexture.Sample(CoverageTextureSampler, CurrentWorldPosition / HNoiseScale);
+		float4 Worley = WorleyTexture.Sample(CoverageTextureSampler, CurrentWorldPosition / BaseNoiseScale);
+		float4 WorleyDetail = WorleyDetailTexture.Sample(CoverageTextureSampler, CurrentWorldPosition / DetailNoiseScale);
+
 		float SNS = Remap(Worley.r, (Worley.g * 0.625 + Worley.b * 0.25 + Worley.a * 0.125) - 1, 1, 0, 1);
 
 		float SN = saturate(Remap(SNS * SA, 1 - Coverage * WMC, 1, 0, 1)) * DA;
 		
-		//Density += CoverageValue * DensityScale * BottomCoverage * TopCoverage * DensityOverZBottom * DensityOverZTop * CoverageSampled.a * SN;
-		Density += SN * DensityScale;
+
+
+		Density += SN * WorleyDetail.x * DensityScale;
 
 		CurrentWorldPosition += StepVector;
 	}

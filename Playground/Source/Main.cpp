@@ -293,8 +293,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float BottomDensity = 0.15f;
 
 		float TopDensity = 0.9f;
-		float HNoiseScale = 125000.0f;
-		float Useless2 = 0.0f;
+		float BaseNoiseScale = 125000.0f;
+		float DetailNoiseScale = 40000.0f;
 		float Useless3 = 0.0f;
 	};
 
@@ -427,7 +427,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	unsigned char* WorleyTextureBlob;
 	int WorleyImageWidth, WorleyImageHeight, WorleyImageNumberOfChannels;
 
-	WorleyTextureBlob = stbi_load("../Content/T_WorlyNoise.png",
+	WorleyTextureBlob = stbi_load("../Content/T_WorleyNoise.png",
 		&WorleyImageWidth, &WorleyImageHeight, &WorleyImageNumberOfChannels, 0);
 
 	Microsoft::WRL::ComPtr<ID3D11Texture3D> WorleyTexture;
@@ -461,6 +461,46 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	WorleyTextureResourceViewDesc.Texture3D.MostDetailedMip = 0;
 
 	Device->CreateShaderResourceView(WorleyTexture.Get(), &WorleyTextureResourceViewDesc, &WorleyTextureResourceView);
+
+	// -------------------------------------------------------------------
+
+	unsigned char* WorleyDetailTextureBlob;
+	int WorleyDetailImageWidth, WorleyDetailImageHeight, WorleyDetailImageNumberOfChannels;
+
+	WorleyDetailTextureBlob = stbi_load("../Content/T_WorleyNoise_Detail.png",
+		&WorleyDetailImageWidth, &WorleyDetailImageHeight, &WorleyDetailImageNumberOfChannels, 0);
+
+	Microsoft::WRL::ComPtr<ID3D11Texture3D> WorleyDetailTexture;
+
+	D3D11_TEXTURE3D_DESC WorleyDetailTextureDescription;
+	WorleyDetailTextureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	WorleyDetailTextureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	WorleyDetailTextureDescription.Height = 32;
+	WorleyDetailTextureDescription.Width = 32;
+	WorleyDetailTextureDescription.Depth = 32;
+	WorleyDetailTextureDescription.CPUAccessFlags = 0;
+	WorleyDetailTextureDescription.MiscFlags = 0;
+	WorleyDetailTextureDescription.Usage = D3D11_USAGE_DEFAULT;
+	WorleyDetailTextureDescription.MipLevels = 1;
+
+	D3D11_SUBRESOURCE_DATA WorleyDetailTextureData;
+	WorleyDetailTextureData.pSysMem = WorleyDetailTextureBlob;
+	WorleyDetailTextureData.SysMemPitch = sizeof(char) * WorleyDetailImageNumberOfChannels * 32;
+	WorleyDetailTextureData.SysMemSlicePitch = sizeof(char) * WorleyDetailImageNumberOfChannels * 32 * 32;
+
+	Device->CreateTexture3D(&WorleyDetailTextureDescription, &WorleyDetailTextureData, &WorleyDetailTexture);
+
+	// ----------------------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> WorleyDetailTextureResourceView;
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC WorleyDetailTextureResourceViewDesc;
+	WorleyDetailTextureResourceViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	WorleyDetailTextureResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+	WorleyDetailTextureResourceViewDesc.Texture3D.MipLevels = 1;
+	WorleyDetailTextureResourceViewDesc.Texture3D.MostDetailedMip = 0;
+
+	Device->CreateShaderResourceView(WorleyDetailTexture.Get(), &WorleyDetailTextureResourceViewDesc, &WorleyDetailTextureResourceView);
 
 	// -------------------------------------------------------------------
 
@@ -586,6 +626,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		DeviceContext->PSSetShaderResources(0, 1, CoverageTextureResourceView.GetAddressOf());
 		DeviceContext->PSSetShaderResources(1, 1, WorleyTextureResourceView.GetAddressOf());
+		DeviceContext->PSSetShaderResources(2, 1, WorleyDetailTextureResourceView.GetAddressOf());
 		DeviceContext->PSSetSamplers(0, 1, CoverageSamplerState.GetAddressOf());
 
 
@@ -626,7 +667,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderFloat("TopRoundness", &PsCloudBL.TopRoundness, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("BottomDensity", &PsCloudBL.BottomDensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TopDensity", &PsCloudBL.TopDensity, 0.0f, 1.0f, "%1f");
-		ImGui::SliderFloat("HNoiseScale", &PsCloudBL.HNoiseScale, 0.0f, 1000000.0f, "%1f");
+		ImGui::SliderFloat("BaseNoiseScale", &PsCloudBL.BaseNoiseScale, 0.0f, 2500000.0f, "%1f");
+		ImGui::SliderFloat("DetailNoiseScale", &PsCloudBL.DetailNoiseScale, 0.0f, 2500000.0f, "%1f");
 
 		ImGui::End();
 
