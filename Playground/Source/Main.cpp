@@ -287,7 +287,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float Coverage = 0.8f;
 		float CoveragemapScale = 50000.0f;
 
-		float DensityScale = 1.0f;
+		float DensityScale = 0.5f;
 		float BottomRoundness = 0.07f;
 		float TopRoundness = 0.2f;
 		float BottomDensity = 0.15f;
