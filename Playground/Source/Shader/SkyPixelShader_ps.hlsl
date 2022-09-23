@@ -20,12 +20,13 @@ cbuffer PCloudBufferLayout : register(b1)
 	float BottomDensity = 0.15f;
 
 	float TopDensity = 0.9f;
-	float Useless1;
+	float HNoiseScale;
 	float Useless2;
 	float Useless3;
 };
 
 Texture2D<float4> CoverageTexture : register(t0);
+Texture3D<float4> WorleyTexture : register(t1);
 SamplerState CoverageTextureSampler: register(s0);
 
 
@@ -66,8 +67,10 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 		float DensityOverZTop = saturate(Remap(ZGradient, TopDensity, 1.0f, 1.0f, 0.0f));
 
 		
+		float HWorley = WorleyTexture.Sample(CoverageTextureSampler, WorldPosition / HNoiseScale).r;
+
 		
-		Density += CoverageValue * DensityScale * BottomCoverage * TopCoverage * DensityOverZBottom * DensityOverZTop * CoverageSampled.a;
+		Density += CoverageValue * DensityScale * BottomCoverage * TopCoverage * DensityOverZBottom * DensityOverZTop * CoverageSampled.a * HWorley;
 
 		CurrentWorldPosition += StepVector;
 	}

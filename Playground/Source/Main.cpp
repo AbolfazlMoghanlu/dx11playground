@@ -293,7 +293,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float BottomDensity = 0.15f;
 
 		float TopDensity = 0.9f;
-		float Useless1 = 0.0f;
+		float HNoiseScale = 10000.0f;
 		float Useless2 = 0.0f;
 		float Useless3 = 0.0f;
 	};
@@ -390,11 +390,11 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	D3D11_SUBRESOURCE_DATA CoverageTextureData;
 	CoverageTextureData.pSysMem = CoverageTextureBlob;
-	CoverageTextureData.SysMemPitch = sizeof(char) * CoverageImageNumberOfChannels * CoverageImageWidth;
+	CoverageTextureData.SysMemPitch = CoverageImageNumberOfChannels * CoverageImageWidth;
 	
 	Device->CreateTexture2D(&CoverageTextureDescription, &CoverageTextureData, &CoverageTexture);
 
-	// ----------------------------------------------------------------
+	// ------------------------------------------------------------------
 
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> CoverageTextureResourceView;
 
@@ -422,8 +422,48 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	Device->CreateSamplerState(&CoverageSamplerDesc, &CoverageSamplerState);
 
-	// ------------------------------------------------------------------
-	
+	// ----------------------------------------------------------------
+
+	unsigned char* WorleyTextureBlob;
+	int WorleyImageWidth, WorleyImageHeight, WorleyImageNumberOfChannels;
+
+	WorleyTextureBlob = stbi_load("../Content/T_WorlyNoise.png",
+		&WorleyImageWidth, &WorleyImageHeight, &WorleyImageNumberOfChannels, 0);
+
+	Microsoft::WRL::ComPtr<ID3D11Texture3D> WorleyTexture;
+
+	D3D11_TEXTURE3D_DESC WorleyTextureDescription;
+	WorleyTextureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	WorleyTextureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	WorleyTextureDescription.Height = 128;
+	WorleyTextureDescription.Width = 128;
+	WorleyTextureDescription.Depth = 128;
+	WorleyTextureDescription.CPUAccessFlags = 0;
+	WorleyTextureDescription.MiscFlags = 0;
+	WorleyTextureDescription.Usage = D3D11_USAGE_DEFAULT;
+	WorleyTextureDescription.MipLevels = 1;
+
+	D3D11_SUBRESOURCE_DATA WorleyTextureData;
+	WorleyTextureData.pSysMem = WorleyTextureBlob;
+	WorleyTextureData.SysMemPitch = sizeof(char) * WorleyImageNumberOfChannels * 128;
+	WorleyTextureData.SysMemSlicePitch = sizeof(char) * WorleyImageNumberOfChannels * 128 * 128;
+
+	Device->CreateTexture3D(&WorleyTextureDescription, &WorleyTextureData, &WorleyTexture);
+
+	// ----------------------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> WorleyTextureResourceView;
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC WorleyTextureResourceViewDesc;
+	WorleyTextureResourceViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	WorleyTextureResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+	WorleyTextureResourceViewDesc.Texture3D.MipLevels = 1;
+	WorleyTextureResourceViewDesc.Texture3D.MostDetailedMip = 0;
+
+	Device->CreateShaderResourceView(WorleyTexture.Get(), &WorleyTextureResourceViewDesc, &WorleyTextureResourceView);
+
+	// -------------------------------------------------------------------
+
 	D3D11_RENDER_TARGET_BLEND_DESC TargetBlendDesc;
 	TargetBlendDesc.BlendEnable = true;
 	TargetBlendDesc.SrcBlend = D3D11_BLEND_SRC_ALPHA;
@@ -502,8 +542,10 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 
+//  		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
+//  			(float)WindowWidth/(float)WindowHeight, 100.0f, 1000000.0f);
 		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
-			(float)WindowWidth/(float)WindowHeight, 100.0f, 1000000.0f);
+			1, 100.0f, 1000000.0f);
 
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
 		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
@@ -543,6 +585,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		DeviceContext->PSSetShader(SkyPixelShader.Get(), 0, 0);
 
 		DeviceContext->PSSetShaderResources(0, 1, CoverageTextureResourceView.GetAddressOf());
+		DeviceContext->PSSetShaderResources(1, 1, WorleyTextureResourceView.GetAddressOf());
 		DeviceContext->PSSetSamplers(0, 1, CoverageSamplerState.GetAddressOf());
 
 
@@ -583,6 +626,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderFloat("TopRoundness", &PsCloudBL.TopRoundness, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("BottomDensity", &PsCloudBL.BottomDensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TopDensity", &PsCloudBL.TopDensity, 0.0f, 1.0f, "%1f");
+		ImGui::SliderFloat("HNoiseScale", &PsCloudBL.HNoiseScale, 0.0f, 10000000.0f, "%1f");
 
 		ImGui::End();
 
