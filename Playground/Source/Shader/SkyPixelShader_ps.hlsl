@@ -73,12 +73,16 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 		float4 WorleyDetail = WorleyDetailTexture.Sample(CoverageTextureSampler, CurrentWorldPosition / DetailNoiseScale);
 
 		float SNS = Remap(Worley.r, (Worley.g * 0.625 + Worley.b * 0.25 + Worley.a * 0.125) - 1, 1, 0, 1);
+		float DN = WorleyDetail.r * 0.625 + WorleyDetail.g * 0.25 + WorleyDetail.b * 0.125;
 
-		float SN = saturate(Remap(SNS * SA, 1 - Coverage * WMC, 1, 0, 1)) * DA;
-		
+		float SN = saturate(Remap(SNS * SA, 1 - Coverage * WMC, 1, 0, 1));
+		float DNM = 0.35 * exp(-Coverage * 0.75) * lerp(DN, 1 - DN, saturate(ZGradient * 5));
+			
+
+		float d = saturate(Remap(SN, DNM, 1, 0, 1)) * DA;
 
 
-		Density += SN * WorleyDetail.x * DensityScale;
+		Density += d * DensityScale;
 
 		CurrentWorldPosition += StepVector;
 	}
