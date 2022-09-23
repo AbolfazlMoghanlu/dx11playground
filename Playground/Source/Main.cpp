@@ -295,7 +295,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float TopDensity = 0.9f;
 		float BaseNoiseScale = 125000.0f;
 		float DetailNoiseScale = 40000.0f;
-		float Useless3 = 0.0f;
+		float Anvil = 0.5f;
 	};
 
 	D3D11_BUFFER_DESC PsCloudBufferDesc;
@@ -669,6 +669,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderFloat("TopDensity", &PsCloudBL.TopDensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("BaseNoiseScale", &PsCloudBL.BaseNoiseScale, 0.0f, 2500000.0f, "%1f");
 		ImGui::SliderFloat("DetailNoiseScale", &PsCloudBL.DetailNoiseScale, 0.0f, 2500000.0f, "%1f");
+		ImGui::SliderFloat("Anvil", &PsCloudBL.Anvil, 0.0f, 1.0f, "%1f");
 
 		ImGui::End();
 

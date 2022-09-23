@@ -22,7 +22,7 @@ cbuffer PCloudBufferLayout : register(b1)
 	float TopDensity;
 	float BaseNoiseScale;
 	float DetailNoiseScale;
-	float Useless3;
+	float Anvil;
 };
 
 Texture2D<float4> CoverageTexture : register(t0);
@@ -64,10 +64,12 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 		float BottomCoverage = saturate(Remap(ZGradient, 0.0f, BottomRoundness, 0.0f, 1.0f));
 		float TopCoverage = saturate(Remap(ZGradient, CoverageSampled.b * TopRoundness, CoverageSampled.b, 1.0f, 0.0f));
 		float SA = BottomCoverage * TopCoverage;
+		float SAA = pow(SA, saturate(Remap(ZGradient, 0.65, 0.95, 1, 1 - Anvil * Coverage)));
 
 		float DensityOverZBottom = ZGradient * saturate(Remap(ZGradient, 0.0f, BottomDensity, 0.0f, 1.0f));
 		float DensityOverZTop = saturate(Remap(ZGradient, TopDensity, 1.0f, 1.0f, 0.0f));
 		float DA = DensityOverZBottom * DensityOverZTop;
+		float DAA = DA * lerp(1, saturate(Remap(sqrt(ZGradient), 0.4, 0.95, 1, 0.2)), Anvil);
 		
 		float4 Worley = WorleyTexture.Sample(CoverageTextureSampler, CurrentWorldPosition / BaseNoiseScale);
 		float4 WorleyDetail = WorleyDetailTexture.Sample(CoverageTextureSampler, CurrentWorldPosition / DetailNoiseScale);
@@ -75,11 +77,11 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 		float SNS = Remap(Worley.r, (Worley.g * 0.625 + Worley.b * 0.25 + Worley.a * 0.125) - 1, 1, 0, 1);
 		float DN = WorleyDetail.r * 0.625 + WorleyDetail.g * 0.25 + WorleyDetail.b * 0.125;
 
-		float SN = saturate(Remap(SNS * SA, 1 - Coverage * WMC, 1, 0, 1));
+		float SN = saturate(Remap(SNS * SAA, 1 - Coverage * WMC, 1, 0, 1));
 		float DNM = 0.35 * exp(-Coverage * 0.75) * lerp(DN, 1 - DN, saturate(ZGradient * 5));
-			
+	
 
-		float d = saturate(Remap(SN, DNM, 1, 0, 1)) * DA;
+		float d = saturate(Remap(SN, DNM, 1, 0, 1)) * DAA;
 
 
 		Density += d * DensityScale;
