@@ -280,11 +280,11 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	struct PCloudBufferLayout
 	{
 		Vector3f CloudColor = Vector3f(1.0f, 1.0f, 1.0f);
-		float StartZ = 10000.0f;
+		float StartZ = 100000.0f;
 
 		int Steps = 64;
-		float Height = 5000.0f;
-		float Coverage = 0.7f;
+		float Height = 100000.0f;
+		float Coverage = 0.8f;
 		float CoveragemapScale = 50000.0f;
 
 		float DensityScale = 1.0f;
@@ -293,7 +293,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float BottomDensity = 0.15f;
 
 		float TopDensity = 0.9f;
-		float HNoiseScale = 10000.0f;
+		float HNoiseScale = 125000.0f;
 		float Useless2 = 0.0f;
 		float Useless3 = 0.0f;
 	};
@@ -619,14 +619,14 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderInt("Steps", &PsCloudBL.Steps, 2, 256);
 		ImGui::SliderFloat("Coverage", &PsCloudBL.Coverage, 0.0f, 2.0f, "%1f");
 		ImGui::SliderFloat("CoverageScale", &PsCloudBL.CoveragemapScale, 1000.0f, 1000000.0f, "%1f");
-		ImGui::SliderFloat("StartZ", &PsCloudBL.StartZ, 1000.0f, 100000.0f, "%1f");
-		ImGui::SliderFloat("Height", &PsCloudBL.Height, 1000.0f, 100000.0f, "%1f");
+		ImGui::SliderFloat("StartZ", &PsCloudBL.StartZ, 1000.0f, 500000.0f, "%1f");
+		ImGui::SliderFloat("Height", &PsCloudBL.Height, 1000.0f, 500000.0f, "%1f");
 		ImGui::SliderFloat("DensityScale", &PsCloudBL.DensityScale, 0.0f, 2.0f, "%1f");
 		ImGui::SliderFloat("BottomRoundness", &PsCloudBL.BottomRoundness, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TopRoundness", &PsCloudBL.TopRoundness, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("BottomDensity", &PsCloudBL.BottomDensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TopDensity", &PsCloudBL.TopDensity, 0.0f, 1.0f, "%1f");
-		ImGui::SliderFloat("HNoiseScale", &PsCloudBL.HNoiseScale, 0.0f, 10000000.0f, "%1f");
+		ImGui::SliderFloat("HNoiseScale", &PsCloudBL.HNoiseScale, 0.0f, 1000000.0f, "%1f");
 
 		ImGui::End();
 
