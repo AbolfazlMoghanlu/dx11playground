@@ -20,6 +20,8 @@ const float CameraSpeed = 1.0f;
 
 Vector3f CameraPosition = Vector3f(0.0f);
 
+Rotatorf LightDirection = Rotatorf(90.0f, 0.0f, 0.0f);
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	PSTR lpCmdLine, int nCmdShow)
 {
@@ -313,7 +315,10 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		float TracingStartMaxDistance = 350000;
 		float DetailNoiseIntensity = 0.8f;
-		float Useless2 = 0.0f;
+		int LightSteps = 32;
+		float LightStepSize = 100000.0f;
+
+		Vector3f LightDir;
 		float Useless3 = 0.0f;
 	};
 
@@ -694,6 +699,11 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderFloat("DetailNoiseIntensity", &PsCloudBL.DetailNoiseIntensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("Anvil", &PsCloudBL.Anvil, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TracingStartMaxDistance", &PsCloudBL.TracingStartMaxDistance, 100000.0, 500000.0, "%1f");
+		ImGui::SliderInt("LightSteps", &PsCloudBL.LightSteps, 1, 32);
+		ImGui::SliderFloat("LightStepSize", &PsCloudBL.LightStepSize, 1.0, 1000000.0, "%1f");
+		ImGui::SliderFloat3("LightDirection", &LightDirection.Pitch, 0.0, 360.0, "%1f");
+
+		PsCloudBL.LightDir = LightDirection.Vector();
 
 		ImGui::End();
 
@@ -704,7 +714,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		// -----------------------------------------------------------------
 
-		SwapChain->Present(1, 0);
+		SwapChain->Present(0, 0);
 	}
 
 	ImGui_ImplDX11_Shutdown();
