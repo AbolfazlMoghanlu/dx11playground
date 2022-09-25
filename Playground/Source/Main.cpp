@@ -297,22 +297,22 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float StartZ = 5000.0f;
 
 		int Steps = 64;
-		float Height = 1000.0f;
+		float Height = 10000.0f;
 		float Coverage = 0.8f;
-		float CoveragemapScale = 5000.0f;
+		float CoveragemapScale = 100000.0f;
 
-		float DensityScale = 0.5f;
+		float DensityScale = 0.2f;
 		float BottomRoundness = 0.07f;
 		float TopRoundness = 0.2f;
 		float BottomDensity = 0.15f;
 
 		float TopDensity = 0.9f;
-		float BaseNoiseScale = 125000.0f;
-		float DetailNoiseScale = 40000.0f;
+		float BaseNoiseScale = 20000.0f;
+		float DetailNoiseScale = 5000.0f;
 		float Anvil = 0.5f;
 
 		float TracingStartMaxDistance = 350000;
-		float Useless1 = 0.0f;
+		float DetailNoiseIntensity = 0.8f;
 		float Useless2 = 0.0f;
 		float Useless3 = 0.0f;
 	};
@@ -681,7 +681,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::ColorEdit3("CloudColor", &PsCloudBL.CloudColor.X);
 		ImGui::SliderInt("Steps", &PsCloudBL.Steps, 2, 256);
 		ImGui::SliderFloat("Coverage", &PsCloudBL.Coverage, 0.0f, 2.0f, "%1f");
-		ImGui::SliderFloat("CoverageScale", &PsCloudBL.CoveragemapScale, 1000.0f, 10000.0f, "%1f");
+		ImGui::SliderFloat("CoverageScale", &PsCloudBL.CoveragemapScale, 50000.0f, 500000.0f, "%1f");
 		ImGui::SliderFloat("StartZ", &PsCloudBL.StartZ, 1.0f, 20000.0f, "%1f");
 		ImGui::SliderFloat("Height", &PsCloudBL.Height, 1.0f, 20000.0f, "%1f");
 		ImGui::SliderFloat("DensityScale", &PsCloudBL.DensityScale, 0.0f, 2.0f, "%1f");
@@ -689,8 +689,9 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderFloat("TopRoundness", &PsCloudBL.TopRoundness, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("BottomDensity", &PsCloudBL.BottomDensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TopDensity", &PsCloudBL.TopDensity, 0.0f, 1.0f, "%1f");
-		ImGui::SliderFloat("BaseNoiseScale", &PsCloudBL.BaseNoiseScale, 0.0f, 2500000.0f, "%1f");
-		ImGui::SliderFloat("DetailNoiseScale", &PsCloudBL.DetailNoiseScale, 100000.0, 500000.0, "%1f");
+		ImGui::SliderFloat("BaseNoiseScale", &PsCloudBL.BaseNoiseScale, 5000.0f, 50000.0f, "%1f");
+		ImGui::SliderFloat("DetailNoiseScale", &PsCloudBL.DetailNoiseScale, 500.0f, 10000.0f, "%1f");
+		ImGui::SliderFloat("DetailNoiseIntensity", &PsCloudBL.DetailNoiseIntensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("Anvil", &PsCloudBL.Anvil, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TracingStartMaxDistance", &PsCloudBL.TracingStartMaxDistance, 100000.0, 500000.0, "%1f");
 
