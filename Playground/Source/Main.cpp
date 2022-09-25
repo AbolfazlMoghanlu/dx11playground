@@ -67,7 +67,44 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	{
 		return -1;
 	}
+
+	// --------------------------------------------------------------
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> CloudTargetReource;
+
+	D3D11_TEXTURE2D_DESC CloudTargetDesc;
+	CloudTargetDesc.Width = WindowWidth / 2;
+	CloudTargetDesc.Height = WindowHeight / 2;
+	CloudTargetDesc.MipLevels = 1;
+	CloudTargetDesc.ArraySize = 1;
+	CloudTargetDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	CloudTargetDesc.SampleDesc.Count = 1;
+	CloudTargetDesc.SampleDesc.Quality = 0;
+	CloudTargetDesc.Usage = D3D11_USAGE_DEFAULT;
+	CloudTargetDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE; 
+	CloudTargetDesc.CPUAccessFlags = 0;
+	CloudTargetDesc.MiscFlags = 0;
+
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> CloudRenderTarget;
+	Device->CreateTexture2D(&CloudTargetDesc, NULL, &CloudRenderTarget);
+
+	D3D11_RENDER_TARGET_VIEW_DESC CloudRenderTargetViewDesc;
+	CloudRenderTargetViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	CloudRenderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	CloudRenderTargetViewDesc.Texture2D.MipSlice = 0; 
+
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> CloudRenderTargetView;
+	Device->CreateRenderTargetView(CloudRenderTarget.Get(), &CloudRenderTargetViewDesc, &CloudRenderTargetView);
 	
+	D3D11_SHADER_RESOURCE_VIEW_DESC CloudShaderResourceViewDesc;
+	CloudShaderResourceViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	CloudShaderResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	CloudShaderResourceViewDesc.Texture2D.MipLevels = 1;
+	CloudShaderResourceViewDesc.Texture2D.MostDetailedMip = 0;
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> CloudShaderView;
+	Device->CreateShaderResourceView(CloudRenderTarget.Get(), &CloudShaderResourceViewDesc, CloudShaderView.GetAddressOf());
+
 	// -----------------------------------------------
 
 	Microsoft::WRL::ComPtr<ID3D11Resource> BackBuffer;
@@ -89,20 +126,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float G;
 		float B;
 	};
-
-// 	const Vertex SkyVertecies[] = 
-// 	{
-// 		{0.5f, 0.0f, 0.5f,		1.0f, 1.0f, 1.0f},
-// 		{0.5f, 0.0f, -0.5f,		1.0f, 0.0f, 0.0f},
-// 		{-0.5f, 0.0f, 0.5f,		0.0f, 1.0f, 0.0f},
-// 		{-0.5f, 0.0f, -0.5f,	0.0f, 0.0f, 1.0f}
-// 	};
-// 
-// 	const unsigned short int SkyIndices[] =
-// 	{
-// 		2, 1, 0,
-// 		2, 3, 1
-// 	};
 
 	const Vertex SkyVertecies[] = 
 	{
@@ -238,15 +261,20 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	// ------------------------------------------------
 
-	D3D11_VIEWPORT ViewportDesc;
-	ViewportDesc.Width = WindowWidth;
-	ViewportDesc.Height = WindowHeight;
-	ViewportDesc.MinDepth = 0.0f;
-	ViewportDesc.MaxDepth = 1.0f;
-	ViewportDesc.TopLeftX = 0.0f;
-	ViewportDesc.TopLeftY = 0.0f;
+	auto SetViewportSize = [&DeviceContext](float Width, float Height)
+	{
+		D3D11_VIEWPORT ViewportDesc;
+		ViewportDesc.Width = Width;
+		ViewportDesc.Height = Height;
+		ViewportDesc.MinDepth = 0.0f;
+		ViewportDesc.MaxDepth = 1.0f;
+		ViewportDesc.TopLeftX = 0.0f;
+		ViewportDesc.TopLeftY = 0.0f;
 
-	DeviceContext->RSSetViewports(1, &ViewportDesc);
+		DeviceContext->RSSetViewports(1, &ViewportDesc);
+	};
+	
+	SetViewportSize(WindowWidth, WindowHeight);
 
 	// -----------------------------------------------
 
@@ -363,8 +391,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> DepthStencilView;
 	Device->CreateDepthStencilView(DepthStencilTexture.Get(), &DepthViewDesc, &DepthStencilView);
-
-	DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), DepthStencilView.Get());
 
 
 	D3D11_DEPTH_STENCIL_DESC DepthStencilDesc;
@@ -567,11 +593,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	while (MainWindow.IsOpen())
 	{
-		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
-		DeviceContext->ClearDepthStencilView(DepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
-
-		// ----------------------------------------------------------------
-
 		if (MainWindow.IsRightClickDown())
 		{
 			float CameraPitchOffset = MouseSpeed * -MainWindow.MouseDeltaY;
@@ -613,6 +634,18 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
 		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
 
+		// ---------------------------------------------------------------
+		
+		float BlackColor[] = {0.0f, 0.0f, 0.0f, 0.0f};
+		
+		ID3D11ShaderResourceView* nullRTV = nullptr;
+		DeviceContext->PSSetShaderResources(0, 1, &nullRTV);
+
+		DeviceContext->ClearRenderTargetView(CloudRenderTargetView.Get(), BlackColor);
+		DeviceContext->OMSetRenderTargets(1, CloudRenderTargetView.GetAddressOf(), NULL);
+		
+		SetViewportSize(WindowWidth / 2, WindowHeight / 2);
+
 		// ----------------------------------------------------------------
 
 		const UINT stride = sizeof(Vertex);
@@ -628,7 +661,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
 		DeviceContext->VSSetConstantBuffers(0, 1, VsConstantBuffer.GetAddressOf());
 
-		DeviceContext->PSSetShader(PixelShader.Get(), 0, 0);
+		DeviceContext->PSSetShader(SkyPixelShader.Get(), 0, 0);
 
 		DeviceContext->DrawIndexed(36, 0, 0);
 
@@ -672,6 +705,20 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 		// -----------------------------------------------------------------
 
+		DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), DepthStencilView.Get());
+		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
+		DeviceContext->ClearDepthStencilView(DepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+
+		SetViewportSize(WindowWidth, WindowHeight);
+		DeviceContext->PSSetShader(PixelShader.Get(), 0, 0);
+
+		DeviceContext->PSSetShaderResources(0, 1, CloudShaderView.GetAddressOf());
+		DeviceContext->PSSetSamplers(0, 1, CoverageSamplerState.GetAddressOf());
+
+		DeviceContext->DrawIndexed(6, 0, 0);
+
+		// -----------------------------------------------------------------
+
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
@@ -709,7 +756,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 
 		ImGui::Render();
-		DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), NULL);
+		//DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), NULL);
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
 		// -----------------------------------------------------------------

@@ -132,36 +132,37 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 			FullOpace = Density > 0.99;
 		}
 
-		if (!FullTrans)
-		{
-			float3 CurrentLightPosition = CurrentWorldPosition;
-			float3 LightStepVector = LightDir * LightStepSize / LightSteps; 
-
-			[loop] for(int j = 0; j < LightSteps; j++)
-			{
-				if (!FullTrans)
-				{
-					float3 RayDirection = normalize(CurrentLightPosition - CameraPosition);
-					float i1 = RayIntersection(CameraPosition, RayDirection, Origin, PlanetRadius);
-					float i2 = RayIntersection(CameraPosition, RayDirection, Origin, FarH);
-					float i3 = i2 - i1;
-
-					float LayerHeight = (length(CurrentLightPosition - CameraPosition) - i1) / i3;
-
-					float t = DensityAtPosition(CurrentLightPosition, LayerHeight);
-					Trans = saturate(Trans + t);
-
-
-					CurrentLightPosition = CurrentLightPosition + LightDir * LightStepVector;
-					FullTrans = Trans > 0.99;
-				}
-			}
-		}
-
+		//if (!FullTrans)
+		//{
+		//	float3 CurrentLightPosition = CurrentWorldPosition;
+		//	float3 LightStepVector = LightDir * LightStepSize / LightSteps; 
+		//
+		//	[loop] for(int j = 0; j < LightSteps; j++)
+		//	{
+		//		if (!FullTrans)
+		//		{
+		//			float3 RayDirection = normalize(CurrentLightPosition - CameraPosition);
+		//			float i1 = RayIntersection(CameraPosition, RayDirection, Origin, PlanetRadius);
+		//			float i2 = RayIntersection(CameraPosition, RayDirection, Origin, FarH);
+		//			float i3 = i2 - i1;
+		//
+		//			float LayerHeight = (length(CurrentLightPosition - CameraPosition) - i1) / i3;
+		//
+		//			float t = DensityAtPosition(CurrentLightPosition, LayerHeight);
+		//			Trans = saturate(Trans + t);
+		//
+		//
+		//			CurrentLightPosition = CurrentLightPosition * LightStepVector;
+		//			FullTrans = Trans > 0.99;
+		//		}
+		//	}
+		//}
+		
 		CurrentWorldPosition += StepVector;
 	}
 
-	float3 Color = CloudColor * (1 - Trans / 4);
+	//float3 Color = CloudColor * (1 - Trans);
+	float3 Color = CloudColor;
 
 	return float4(Color, Density);
 }

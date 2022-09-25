@@ -3,6 +3,7 @@ struct VSOut
 	float4 pos : SV_Position;
 	float4 WorldPosition : POSITION0;
 	float3 color : Color;
+	float2 ScreenPos : SC;
 };
 
 cbuffer VSContantBufferLayout : register(b0)
@@ -20,12 +21,14 @@ VSOut main( float3 inpos : POSITION , float3 incolor : Color )
 	Out.color = incolor;
 
 	Out.pos = mul(TransformMatrix, Out.pos);
-	//Out.pos = mul(Out.pos, TransformMatrix);
 	Out.WorldPosition = Out.pos;
 
 	Out.pos = mul(ViewMatrix, Out.pos);
 	Out.pos = mul(ProjectionMatrix, Out.pos);
-	//Out.pos = mul(Out.pos, ProjectionMatrix);
+
+	Out.ScreenPos = Out.pos.xy;
+	Out.ScreenPos = Out.ScreenPos / 4 - 0.5f;
+	Out.ScreenPos *= float2(1, -1);
 
 	return Out;
 }
