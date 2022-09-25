@@ -23,6 +23,11 @@ cbuffer PCloudBufferLayout : register(b1)
 	float BaseNoiseScale;
 	float DetailNoiseScale;
 	float Anvil;
+
+	float TracingStartMaxDistance;
+	float Useless1;
+	float Useless2;
+	float Useless3;
 };
 
 Texture2D<float4> CoverageTexture : register(t0);
@@ -45,6 +50,36 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 	float PixelDistance = length(CameraToWorldPosition);
 	
 	float T = PixelDistance * (Height / SkyCaemraRelativeZ);
+
+	// --------------------------------------------------------------
+
+	float PlanetRadius = 6360000.0f;
+	float3 Origin = float3(0, StartZ - PlanetRadius, 0);
+
+	float3 CameraToOrigin = Origin - CameraPosition;
+
+	float a = dot(CameraVector, CameraToOrigin);
+	float3 b = CameraPosition + CameraVector * a;
+	float c = length(Origin - b);
+
+	float e1 = sqrt(PlanetRadius * PlanetRadius - c * c);
+	float3 NearIntersection = b + CameraVector * e1;
+
+	if(length(NearIntersection - CameraPosition) > TracingStartMaxDistance)
+		return float4(0.0f, 0, 0, 0);
+
+	float FarRadius = PlanetRadius + Height;
+
+	float e2 = sqrt(FarRadius * FarRadius - c * c);
+	float3 FarIntersection = b + CameraVector * e2;
+
+	float LayerHeight = length(FarIntersection - NearIntersection);
+
+	float4 SS;
+	SS = CoverageTexture.Sample(CoverageTextureSampler, NearIntersection.zx / 100 / CoveragemapScale).xxxx;
+	return SS;
+
+	// --------------------------------------------------------------
 
 	float3 StepVector = CameraVector * T / Steps;
 

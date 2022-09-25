@@ -25,6 +25,7 @@ VSOut main( float3 inpos : POSITION , float3 incolor : Color )
 
 	Out.pos = mul(ViewMatrix, Out.pos);
 	Out.pos = mul(ProjectionMatrix, Out.pos);
+	//Out.pos = mul(Out.pos, ProjectionMatrix);
 
 	return Out;
 }
