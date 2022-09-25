@@ -96,6 +96,76 @@ ScaleTranslationMatrix<T>::ScaleTranslationMatrix(const Vector3f& Location, cons
 	M[3][0] = 0.0f;			M[3][1] = 0.0f;			M[3][2] = 0.0f;			M[3][3] = 1.0f;
 }
 
+// -------------------------------------------------------------------
+
+
+
+template<typename T>
+class ScaleRotationTranslationMatrix : public Matrix<T>
+{
+public:
+	ScaleRotationTranslationMatrix(const Vector3f& Scale, const Rotatorf& Rotation, const Vector3f& Origin);
+};
+
+template<typename T>
+ScaleRotationTranslationMatrix<T>::ScaleRotationTranslationMatrix(const Vector3f& Scale, const Rotatorf& Rot, const Vector3f& Origin)
+{
+	auto GetSinCos = [](float& S, float& C, float Degrees)
+	{
+		if (Degrees == 0.f)
+		{
+			S = 0.f;
+			C = 1.f;
+		}
+		else if (Degrees == 90.f)
+		{
+			S = 1.f;
+			C = 0.f;
+		}
+		else if (Degrees == 180.f)
+		{
+			S = 0.f;
+			C = -1.f;
+		}
+		else if (Degrees == 270.f)
+		{
+			S = -1.f;
+			C = 0.f;
+		}
+		else
+		{
+			Math::SinCos(&S, &C, Math::DegreesToRadians(Degrees));
+		}
+	};
+
+	float SP, SY, SR;
+	float CP, CY, CR;
+	GetSinCos(SP, CP, -Rot.Yaw);
+	GetSinCos(SY, CY, Rot.Roll);
+	GetSinCos(SR, CR, Rot.Pitch);
+
+	M[0][0] = (CP * CY) * Scale.X;
+	M[0][1] = (CP * SY) * Scale.X;
+	M[0][2] = (SP)*Scale.X;
+	M[0][3] = 0.f;
+
+	M[1][0] = (SR * SP * CY - CR * SY) * Scale.Y;
+	M[1][1] = (SR * SP * SY + CR * CY) * Scale.Y;
+	M[1][2] = (-SR * CP) * Scale.Y;
+	M[1][3] = 0.f;
+
+	M[2][0] = (-(CR * SP * CY + SR * SY)) * Scale.Z;
+	M[2][1] = (CY * SR - CR * SP * SY) * Scale.Z;
+	M[2][2] = (CR * CP) * Scale.Z;
+	M[2][3] = 0.f;
+
+	M[3][0] = Origin.X;
+	M[3][1] = Origin.Y;
+	M[3][2] = Origin.Z;
+	M[3][3] = 1.f;
+}
+
+// -----------------------------------------------------------
 
 template<typename T>
 class PerspectiveMatrix : public Matrix<T>

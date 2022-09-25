@@ -19,7 +19,8 @@ VSOut main( float3 inpos : POSITION , float3 incolor : Color )
 	Out.pos = float4(inpos, 1.0f);
 	Out.color = incolor;
 
-	Out.pos = mul(Out.pos, TransformMatrix);
+	Out.pos = mul(TransformMatrix, Out.pos);
+	//Out.pos = mul(Out.pos, TransformMatrix);
 	Out.WorldPosition = Out.pos;
 
 	Out.pos = mul(ViewMatrix, Out.pos);

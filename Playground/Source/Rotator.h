@@ -50,7 +50,6 @@ public:
 // 
 // 		return Vector3(CP * CY, CP * SY, SP);
 
-
 		const T PithClamped = Math::Mod(Pitch, (T)360.0);
 		const T YawClamped = Math::Mod(Yaw, (T)360.0);
 

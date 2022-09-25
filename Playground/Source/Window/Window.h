@@ -41,7 +41,7 @@ private:
 
 	HWND WindowHandle;
 
-	bool bOpen;
+	bool bOpen = true;
 
 	int SizeX = 0;
 	int SizeY = 0;

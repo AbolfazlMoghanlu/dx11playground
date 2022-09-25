@@ -89,5 +89,7 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 		CurrentWorldPosition += StepVector;
 	}
 
+	return (1.0f);
+
 	return float4(CloudColor, Density);
 }

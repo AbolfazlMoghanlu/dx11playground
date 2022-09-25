@@ -17,6 +17,9 @@ struct Vector3
 
 	/** (0, 0, 1) */
 	static const Vector3<T> UpVector;
+	
+	/** (0, 0, -1) */
+	static const Vector3<T> DownVector;
 
 	/** (1, 0, 0) */
 	static const Vector3<T> ForwardVector;
@@ -112,6 +115,9 @@ const Vector3<T> Vector3<T>::OneVector = Vector3<T>(1);
 
 template<typename T>
 const Vector3<T> Vector3<T>::UpVector = Vector3<T>(0, 1, 0);
+
+template<typename T>
+const Vector3<T> Vector3<T>::DownVector = Vector3<T>(0, -1, 0);
 
 template<typename T>
 const Vector3<T> Vector3<T>::ForwardVector = Vector3<T>(0, 0, 1);

@@ -16,7 +16,7 @@ const int WindowHeight = 720;
 
 Rotatorf CameraRotation = Rotatorf(0.0f);
 const float MouseSpeed = 500.0f;
-const float CameraSpeed = 100.0f;
+const float CameraSpeed = 1.0f;
 
 Vector3f CameraPosition = Vector3f(0.0f);
 
@@ -88,18 +88,32 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		float B;
 	};
 
+// 	const Vertex SkyVertecies[] = 
+// 	{
+// 		{0.5f, 0.0f, 0.5f,		1.0f, 1.0f, 1.0f},
+// 		{0.5f, 0.0f, -0.5f,		1.0f, 0.0f, 0.0f},
+// 		{-0.5f, 0.0f, 0.5f,		0.0f, 1.0f, 0.0f},
+// 		{-0.5f, 0.0f, -0.5f,	0.0f, 0.0f, 1.0f}
+// 	};
+// 
+// 	const unsigned short int SkyIndices[] =
+// 	{
+// 		2, 1, 0,
+// 		2, 3, 1
+// 	};
+
 	const Vertex SkyVertecies[] = 
 	{
-		{0.5f, 0.0f, 0.5f,		1.0f, 1.0f, 1.0f},
-		{0.5f, 0.0f, -0.5f,		1.0f, 0.0f, 0.0f},
-		{-0.5f, 0.0f, 0.5f,		0.0f, 1.0f, 0.0f},
-		{-0.5f, 0.0f, -0.5f,	0.0f, 0.0f, 1.0f}
+		{0.5f, 0.5f, 0.0f,		1.0f, 1.0f, 1.0f},
+		{0.5f, -0.5f, 0.0f,		1.0f, 0.0f, 0.0f},
+		{-0.5f, 0.5f, 0.0f,		0.0f, 1.0f, 0.0f},
+		{-0.5f, -0.5f, 0.0f,	0.0f, 0.0f, 1.0f}
 	};
 
 	const unsigned short int SkyIndices[] =
 	{
-		2, 1, 0,
-		2, 3, 1
+		2, 0, 1,
+		2, 1, 3
 	};
 
 
@@ -415,6 +429,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	CoverageSamplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
 	CoverageSamplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
 	CoverageSamplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	CoverageSamplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 	CoverageSamplerDesc.MaxAnisotropy = 16;
 	CoverageSamplerDesc.MinLOD = 0;
 	CoverageSamplerDesc.MaxLOD = 1;
@@ -578,14 +593,15 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		auto Time = std::chrono::high_resolution_clock();
 		auto Now =  Time.now();
 
-		float TimeSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(Now.time_since_epoch()).count();
+		float TimeSeconds = (float)std::chrono::duration_cast<std::chrono::milliseconds>(Now.time_since_epoch()).count();
 
 		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 
-//  		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
-//  			(float)WindowWidth/(float)WindowHeight, 100.0f, 1000000.0f);
-		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
-			1, 100.0f, 1000000.0f);
+// 		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
+// 			(float)WindowWidth / (float)WindowHeight, 0.1f, 1000.0f);
+
+ 		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
+ 			1, 0.1f, 1000.0f);
 
 		VsConstantBL.ViewMatrix = CameraViewMatrix;
 		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
@@ -598,7 +614,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		DeviceContext->IASetInputLayout(VertexInputLayout.Get());
 		DeviceContext->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
 
-		Matrix<float> CubeTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, 0.0, 5.0f), Vector3f(1.0f));
+		Matrix<float> CubeTransformMatrix = ScaleRotationTranslationMatrix<float>(Vector3f(1.0f), Rotatorf::ZeroRotator, Vector3f(0.0f, 0.0, 5.0f));
 		VsConstantBL.TransformMatrix = CubeTransformMatrix;
 
 		VSConstantData.pSysMem = &VsConstantBL;
@@ -615,7 +631,12 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		DeviceContext->IASetInputLayout(SkyVertexInputLayout.Get());
 		DeviceContext->IASetIndexBuffer(SkyIndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
 
-		Matrix<float> SkyTransformMatrix = ScaleTranslationMatrix<float>(Vector3f(0.0f, PsCloudBL.StartZ, 0.0f), Vector3f(1000000.0f));
+		Vector3f SkyPosition = CameraPosition + CameraForwardVector * 1.0f;
+		Rotatorf SkyRotation = CameraRotation;
+		//Rotatorf SkyRotation = Rotatorf(0.0f, Math::Abs((Math::Sin(TimeSeconds / 100)) * 90) + 270, 0.0f);
+		Vector3f SkyScale = Vector3f(1.0f);
+
+		Matrix<float> SkyTransformMatrix = ScaleRotationTranslationMatrix<float>(SkyScale, SkyRotation, SkyPosition);
 		VsConstantBL.TransformMatrix = SkyTransformMatrix;
 
 		VSConstantData.pSysMem = &VsConstantBL;
