@@ -2,7 +2,7 @@
 #include "Window.h"
 #include "Imgui/imgui.h"
 #include "Imgui/backends/imgui_impl_win32.h"
-#include "Imgui/backends/imgui_impl_dx11.h"
+#include "Imgui/backends/imgui_impl_dx12.h"
 
 #define WINDOW_CLASS_NAME L"DX11Playground"
 

@@ -8,414 +8,433 @@
 #include "stb_image.h"
 
 #include "Imgui/imgui.h"
-#include "imgui/backends/imgui_impl_dx11.h"
+#include "imgui/backends/imgui_impl_dx12.h"
 #include "imgui/backends/imgui_impl_win32.h"
 
-const int WindowWidth = 1080; 
-const int WindowHeight = 720; 
+using namespace Microsoft::WRL;
+
+const int WindowWidth = 1080;
+const int WindowHeight = 720;
 
 Rotatorf CameraRotation = Rotatorf(0.0f);
-const float MouseSpeed = 500.0f;
-const float CameraSpeed = 1.0f;
-
 Vector3f CameraPosition = Vector3f(0.0f);
+const float MouseSpeed = 500.0f;
+const float CameraSpeed = 10.0f;
 
 Rotatorf LightDirection = Rotatorf(90.0f, 0.0f, 0.0f);
 
-int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
-	PSTR lpCmdLine, int nCmdShow)
+Window* MainWindow;
+
+
+struct Vertex
 {
-	Window::Startup();
+	Vector3f position;
+	Vector3f color;
+	float U;
+};
 
-	Window MainWindow(L"DxWindow", WindowWidth, WindowHeight);
+struct VSConstantBufferLayout
+{
+	Matrix<float> TransformMatrix;
+	Matrix<float> ViewMatrix;
+	Matrix<float> ProjectionMatrix;
+	float padding[16] = { 0 };
+};
+
+VSConstantBufferLayout VSConstantBuffer;
+
+const int FrameCount = 2;
+
+D3D12_VIEWPORT m_viewport;
+D3D12_RECT m_scissorRect;
+ComPtr<IDXGISwapChain3> m_swapChain;
+ComPtr<ID3D12Device> m_device;
+ComPtr<ID3D12Resource> m_renderTargets[FrameCount];
+ComPtr<ID3D12CommandAllocator> m_commandAllocator;
+ComPtr<ID3D12CommandQueue> m_commandQueue;
+ComPtr<ID3D12RootSignature> m_rootSignature;
+ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
+ComPtr<ID3D12DescriptorHeap> m_ConstantHeap;
+ComPtr<ID3D12DescriptorHeap> m_ImGuiHeap;
+ComPtr<ID3D12PipelineState> m_pipelineState;
+ComPtr<ID3D12GraphicsCommandList> m_commandList;
+UINT m_rtvDescriptorSize;
+ComPtr<ID3D12Resource> m_constantBuffer;
+UINT8* m_pCbvDataBegin;
+ComPtr<ID3D12Resource> m_cloudBuffer;
+UINT8* m_pCloudbvDataBegin;
+
+ComPtr<ID3D12Resource> m_vertexBuffer;
+D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+ComPtr<ID3D12Resource> m_CoverageTexture;
+ComPtr<ID3D12Resource> textureUploadHeap;
+
+ComPtr<ID3D12Resource> m_WorleyBaseTexture;
+ComPtr<ID3D12Resource> m_WorleyBaseUpload;
+
+ComPtr<ID3D12Resource> m_WorleyDetailTexture;
+ComPtr<ID3D12Resource> m_WorleyDetailUpload;
 
 
-	AllocConsole();
-	
-	static std::ofstream conout("CONOUT$", std::ios::out);
-	// Set std::cout stream buffer to conout's buffer (aka redirect/fdreopen)
-	std::cout.rdbuf(conout.rdbuf());
-	
+UINT m_frameIndex;
+HANDLE m_fenceEvent;
+ComPtr<ID3D12Fence> m_fence;
+UINT64 m_fenceValue;
 
-	Microsoft::WRL::ComPtr<ID3D11Device> Device;
-	Microsoft::WRL::ComPtr<IDXGISwapChain> SwapChain;
-	Microsoft::WRL::ComPtr<ID3D11DeviceContext> DeviceContext;
 
-	DXGI_SWAP_CHAIN_DESC SwapChainDesc;
-	SwapChainDesc.BufferDesc.Width = WindowWidth;
-	SwapChainDesc.BufferDesc.Height = WindowHeight;
-	SwapChainDesc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-	SwapChainDesc.BufferDesc.RefreshRate.Numerator = 0;
-	SwapChainDesc.BufferDesc.RefreshRate.Denominator = 0;
-	SwapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	SwapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	SwapChainDesc.SampleDesc.Count = 1;
-	SwapChainDesc.SampleDesc.Quality = 0;
-	SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	SwapChainDesc.BufferCount = 1;
-	SwapChainDesc.OutputWindow = MainWindow.GetHandle();
-	SwapChainDesc.Windowed = TRUE;
-	SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-	SwapChainDesc.Flags = 0;
+struct PCloudBufferLayout
+{
+	Vector3f CameraPosition;
+	float UselessData;
 
-	UINT CFlags = D3D11_CREATE_DEVICE_DEBUG;
+	Vector3f CloudColor = Vector3f(1.0f, 1.0f, 1.0f);
+	float StartZ = 5000.0f;
 
-	HRESULT Result = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, CFlags, nullptr, 0, D3D11_SDK_VERSION,
-		&SwapChainDesc, &SwapChain, &Device, nullptr, &DeviceContext);
+	int Steps = 64;
+	float Height = 10000.0f;
+	float Coverage = 0.8f;
+	float CoveragemapScale = 100000.0f;
 
-	if (FAILED(Result))
+	float DensityScale = 0.2f;
+	float BottomRoundness = 0.07f;
+	float TopRoundness = 0.2f;
+	float BottomDensity = 0.15f;
+
+	float TopDensity = 0.9f;
+	float BaseNoiseScale = 35000.0f;
+	float DetailNoiseScale = 20000.0f;
+	float Anvil = 0.5f;
+
+	float TracingStartMaxDistance = 350000;
+	float DetailNoiseIntensity = 0.8f;
+	int LightSteps = 32;
+	float LightStepSize = 100000.0f;
+
+	Vector3f LightDir;
+	float Useless3 = 0.0f;
+
+	float Padding[36];
+};
+
+PCloudBufferLayout PsCloudBL;
+
+void WaitForPreviousFrame()
+{
+	const UINT64 fence = m_fenceValue;
+	m_commandQueue->Signal(m_fence.Get(), fence);
+	m_fenceValue++;
+
+	if (m_fence->GetCompletedValue() < fence)
 	{
-		return -1;
+		m_fence->SetEventOnCompletion(fence, m_fenceEvent);
+		WaitForSingleObject(m_fenceEvent, INFINITE);
 	}
 
-	// --------------------------------------------------------------
+	m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+}
 
-	Microsoft::WRL::ComPtr<ID3D11Texture2D> CloudTargetReource;
+void SetViewportSize(int X, int Y)
+{
+	m_viewport.Width = float(X);
+	m_viewport.Height = float(Y);
+	m_viewport.MinDepth = 0;
+	m_viewport.MaxDepth = 1;
+	m_viewport.TopLeftX = 0;
+	m_viewport.TopLeftY = 0;
 
-	D3D11_TEXTURE2D_DESC CloudTargetDesc;
-	CloudTargetDesc.Width = WindowWidth / 2;
-	CloudTargetDesc.Height = WindowHeight / 2;
-	CloudTargetDesc.MipLevels = 1;
-	CloudTargetDesc.ArraySize = 1;
-	CloudTargetDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	CloudTargetDesc.SampleDesc.Count = 1;
-	CloudTargetDesc.SampleDesc.Quality = 0;
-	CloudTargetDesc.Usage = D3D11_USAGE_DEFAULT;
-	CloudTargetDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE; 
-	CloudTargetDesc.CPUAccessFlags = 0;
-	CloudTargetDesc.MiscFlags = 0;
+	m_scissorRect.left = 0;
+	m_scissorRect.right = X;
+	m_scissorRect.top = 0;
+	m_scissorRect.bottom = Y;
+}
 
-	Microsoft::WRL::ComPtr<ID3D11Texture2D> CloudRenderTarget;
-	Device->CreateTexture2D(&CloudTargetDesc, NULL, &CloudRenderTarget);
-
-	D3D11_RENDER_TARGET_VIEW_DESC CloudRenderTargetViewDesc;
-	CloudRenderTargetViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	CloudRenderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-	CloudRenderTargetViewDesc.Texture2D.MipSlice = 0; 
-
-	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> CloudRenderTargetView;
-	Device->CreateRenderTargetView(CloudRenderTarget.Get(), &CloudRenderTargetViewDesc, &CloudRenderTargetView);
-	
-	D3D11_SHADER_RESOURCE_VIEW_DESC CloudShaderResourceViewDesc;
-	CloudShaderResourceViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	CloudShaderResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	CloudShaderResourceViewDesc.Texture2D.MipLevels = 1;
-	CloudShaderResourceViewDesc.Texture2D.MostDetailedMip = 0;
-
-	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> CloudShaderView;
-	Device->CreateShaderResourceView(CloudRenderTarget.Get(), &CloudShaderResourceViewDesc, CloudShaderView.GetAddressOf());
-
-	// -----------------------------------------------
-
-	Microsoft::WRL::ComPtr<ID3D11Resource> BackBuffer;
-	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> BackBufferView;
-
-	SwapChain->GetBuffer(0, __uuidof(ID3D11Resource), reinterpret_cast<void**>(BackBuffer.GetAddressOf()));
-	Device->CreateRenderTargetView(BackBuffer.Get(), nullptr, &BackBufferView);
-	float ClearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
-
-	// ------------------------------------------------
-
-	struct Vertex
+void LoadPipeline()
+{
 	{
-		float X;
-		float Y;
-		float Z;
+		ComPtr<ID3D12Debug> debugController;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+		{
+			debugController->EnableDebugLayer();
+		}
+	}
 
-		float R;
-		float G;
-		float B;
-	};
+	ComPtr<IDXGIFactory4> factory;
+	CreateDXGIFactory1(IID_PPV_ARGS(&factory));
 
-	const Vertex SkyVertecies[] = 
+	ComPtr<IDXGIAdapter> Adapter;
+	//	factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter));
+
+
+	SIZE_T maxDedicatedVideoMemory = 0;
+	UINT Index = 0;
+	for (UINT i = 0; factory->EnumAdapters(i, &Adapter) != DXGI_ERROR_NOT_FOUND; ++i)
 	{
-		{0.5f, 0.5f, 0.0f,		1.0f, 1.0f, 1.0f},
-		{0.5f, -0.5f, 0.0f,		1.0f, 0.0f, 0.0f},
-		{-0.5f, 0.5f, 0.0f,		0.0f, 1.0f, 0.0f},
-		{-0.5f, -0.5f, 0.0f,	0.0f, 0.0f, 1.0f}
-	};
+		DXGI_ADAPTER_DESC AdaptorDesc;
+		Adapter->GetDesc(&AdaptorDesc);
 
-	const unsigned short int SkyIndices[] =
+		if (AdaptorDesc.DedicatedVideoMemory > maxDedicatedVideoMemory)
+		{
+			maxDedicatedVideoMemory = AdaptorDesc.DedicatedVideoMemory;
+			Index = i;
+		}
+	}
+
+	factory->EnumAdapters(Index, &Adapter);
+
+	D3D12CreateDevice(
+		Adapter.Get(),
+		D3D_FEATURE_LEVEL_11_0,
+		IID_PPV_ARGS(&m_device)
+	);
+
+
+
+
+
+	D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+	queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+
+	m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue));
+
+	DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
+	swapChainDesc.BufferCount = FrameCount;
+	swapChainDesc.BufferDesc.Width = WindowWidth;
+	swapChainDesc.BufferDesc.Height = WindowHeight;
+	swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+	swapChainDesc.OutputWindow = MainWindow->GetHandle();
+	swapChainDesc.SampleDesc.Count = 1;
+	swapChainDesc.Windowed = true;
+
+	ComPtr<IDXGISwapChain> swapChain;
+	HRESULT a = factory->CreateSwapChain(
+		m_commandQueue.Get(),
+		&swapChainDesc,
+		&swapChain
+	);
+
+	swapChain.As(&m_swapChain);
+	m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+
 	{
-		2, 0, 1,
-		2, 1, 3
-	};
+		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+		rtvHeapDesc.NumDescriptors = 2;
+		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
 
+		m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	}
 
-	const Vertex CubeVertecies[] = 
 	{
-		 {0.5 , 0.5  ,-0.5 ,		1.0f, 1.0f, 1.0f},	//0
-		 {0.5 , -0.5 ,-0.5 ,		1.0f, 0.0f, 0.0f},	//1
-		 {0.5 , 0.5  ,0.5  ,		0.0f, 1.0f, 0.0f},	//2
-		 {0.5 , -0.5 ,0.5  ,		0.0f, 0.0f, 1.0f},	//3
-		 {-0.5,  0.5 ,-0.5 ,		1.0f, 1.0f, 1.0f},	//4
-		 {-0.5,  -0.5, -0.5,		1.0f, 0.0f, 0.0f},	//5
-		 {-0.5,  0.5 ,0.5  ,		0.0f, 1.0f, 0.0f},	//6
-		 {-0.5,  -0.5, 0.5 ,		0.0f, 0.0f, 1.0f}	//7
-	};
+		CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
 
-	const unsigned short int CubeIndices[] =
+		// Create a RTV for each frame.
+		for (UINT n = 0; n < FrameCount; n++)
+		{
+			m_swapChain->GetBuffer(n, IID_PPV_ARGS(&m_renderTargets[n]));
+			m_device->CreateRenderTargetView(m_renderTargets[n].Get(), nullptr, rtvHandle);
+			rtvHandle.Offset(1, m_rtvDescriptorSize);
+		}
+	}
+
+
+	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc = {};
+	cbvHeapDesc.NumDescriptors = 10;
+	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	m_device->CreateDescriptorHeap(&cbvHeapDesc, IID_PPV_ARGS(&m_ConstantHeap));
+
+
+	m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator));
+}
+
+void LoadAssets()
+{
+	D3D12_DESCRIPTOR_RANGE ranges[5];
+	D3D12_ROOT_PARAMETER rootParameters[1];
+
+	ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+	ranges[0].NumDescriptors = 1;
+	ranges[0].BaseShaderRegister = 0;
+	ranges[0].OffsetInDescriptorsFromTableStart = 0;
+	ranges[0].RegisterSpace = 0;
+
+	ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	ranges[1].NumDescriptors = 1;
+	ranges[1].BaseShaderRegister = 0;
+	ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	ranges[1].RegisterSpace = 0;
+
+	ranges[2].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	ranges[2].NumDescriptors = 1;
+	ranges[2].BaseShaderRegister = 1;
+	ranges[2].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	ranges[2].RegisterSpace = 0;
+
+	ranges[3].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	ranges[3].NumDescriptors = 1;
+	ranges[3].BaseShaderRegister = 2;
+	ranges[3].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	ranges[3].RegisterSpace = 0;
+
+	ranges[4].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+	ranges[4].NumDescriptors = 1;
+	ranges[4].BaseShaderRegister = 1;
+	ranges[4].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	ranges[4].RegisterSpace = 0;
+
+	D3D12_ROOT_DESCRIPTOR_TABLE DescriptorTable;
+	DescriptorTable.NumDescriptorRanges = _countof(ranges);
+	DescriptorTable.pDescriptorRanges = &ranges[0];
+
+	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParameters[0].DescriptorTable = DescriptorTable;
+	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+	D3D12_STATIC_SAMPLER_DESC StaticSamplerDesc = {};
+	StaticSamplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	StaticSamplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	StaticSamplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	StaticSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	StaticSamplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+	StaticSamplerDesc.MaxAnisotropy = 16;
+	StaticSamplerDesc.MaxLOD = 1;
+	StaticSamplerDesc.MinLOD = 0;
+	StaticSamplerDesc.MipLODBias = 0;
+	StaticSamplerDesc.RegisterSpace = 0;
+	StaticSamplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	StaticSamplerDesc.ShaderRegister = 0;
+	StaticSamplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+	D3D12_STATIC_SAMPLER_DESC StaticSamplers[] = { StaticSamplerDesc };
+
 	{
-		4, 0, 1, 4, 1, 5, // front
-		6, 2, 0, 6, 0, 4, // top
-		0, 2, 3, 0, 3, 1, // right
-		6, 4, 5, 6, 5, 7, // left
-		5, 1, 3, 5, 3, 7, // bottom
-		6, 3, 2, 6, 7, 3  // back
-	};
+		CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
+		rootSignatureDesc.Init(_countof(rootParameters), rootParameters, _countof(StaticSamplers), &StaticSamplers[0]
+			, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
-	Microsoft::WRL::ComPtr<ID3D11Buffer> VertexBuffer;
-	D3D11_BUFFER_DESC VertexBufferDesc;
-	VertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	VertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	VertexBufferDesc.CPUAccessFlags = false;
-	VertexBufferDesc.MiscFlags = 0;
-	VertexBufferDesc.ByteWidth = sizeof(CubeVertecies);
-	VertexBufferDesc.StructureByteStride = sizeof(Vertex);
+		ComPtr<ID3DBlob> signature;
+		ComPtr<ID3DBlob> error;
+		D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error);
 
-	Microsoft::WRL::ComPtr<ID3D11Buffer> SkyVertexBuffer;
-	D3D11_BUFFER_DESC SkyVertexBufferDesc = VertexBufferDesc;
-	SkyVertexBufferDesc.ByteWidth = sizeof(SkyVertecies);
+		//std::cout << reinterpret_cast<const char*>(error->GetBufferPointer()) << std::flush;
 
-	D3D11_SUBRESOURCE_DATA VertexDataDesc;
-	VertexDataDesc.pSysMem = CubeVertecies;
+		m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature));
+	}
 
-	D3D11_SUBRESOURCE_DATA SkyVertexDataDesc;
-	SkyVertexDataDesc.pSysMem = SkyVertecies;
-
-	Device->CreateBuffer(&VertexBufferDesc, &VertexDataDesc, &VertexBuffer);
-	Device->CreateBuffer(&SkyVertexBufferDesc, &SkyVertexDataDesc, &SkyVertexBuffer);
-
-	// ------------------------------------------------
-
-	Microsoft::WRL::ComPtr<ID3D11VertexShader> VertexShader;
-	Microsoft::WRL::ComPtr<ID3DBlob> VertexShaderBlob;
-
-	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/VertexShader_vs.cso", VertexShaderBlob.GetAddressOf());
-	Device->CreateVertexShader(VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), nullptr, &VertexShader);
-
-	DeviceContext->VSSetShader(VertexShader.Get(), 0, 0);
-
-	// ------------------------------------------------
-
-	Microsoft::WRL::ComPtr<ID3D11InputLayout> VertexInputLayout;
-	Microsoft::WRL::ComPtr<ID3D11InputLayout> SkyVertexInputLayout;
-
-	const D3D11_INPUT_ELEMENT_DESC VertexInputElementDesc[] =
 	{
-		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{"Color", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
-	};
+		ComPtr<ID3DBlob> vertexShader;
+		ComPtr<ID3DBlob> pixelShader;
 
-	Device->CreateInputLayout(VertexInputElementDesc, (UINT)std::size(VertexInputElementDesc),
-		VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), VertexInputLayout.GetAddressOf());
-		
-	Device->CreateInputLayout(VertexInputElementDesc, (UINT)std::size(VertexInputElementDesc),
-		VertexShaderBlob->GetBufferPointer(), VertexShaderBlob->GetBufferSize(), SkyVertexInputLayout.GetAddressOf());
+		UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 
-	// ------------------------------------------------
+		D3DCompileFromFile(L"Source/Shader/VertexShader_vs.hlsl", nullptr, nullptr, "main", "vs_5_0", compileFlags, 0, &vertexShader, nullptr);
+		D3DCompileFromFile(L"Source/Shader/SkyPixelShader_ps.hlsl", nullptr, nullptr, "main", "ps_5_0", compileFlags, 0, &pixelShader, nullptr);
 
-	D3D11_BUFFER_DESC IndexBufferDesc;
-	IndexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	IndexBufferDesc.ByteWidth = sizeof(CubeIndices);
-	IndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-	IndexBufferDesc.CPUAccessFlags = false;
-	IndexBufferDesc.MiscFlags = 0;
-	IndexBufferDesc.StructureByteStride = sizeof(unsigned short int);
+		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
+		{
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+			{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+			{ "U", 0, DXGI_FORMAT_R32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		};
 
-	D3D11_BUFFER_DESC SkyIndexBufferDesc;
-	SkyIndexBufferDesc = IndexBufferDesc;
-	SkyIndexBufferDesc.ByteWidth = sizeof(SkyIndices);
+		D3D12_RENDER_TARGET_BLEND_DESC TargetBlendDesc;
+		TargetBlendDesc.BlendEnable = true;
+		TargetBlendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		TargetBlendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+		TargetBlendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		TargetBlendDesc.SrcBlendAlpha = D3D12_BLEND_SRC_ALPHA;
+		TargetBlendDesc.DestBlendAlpha = D3D12_BLEND_DEST_ALPHA;
+		TargetBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		TargetBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+		TargetBlendDesc.LogicOpEnable = FALSE;
 
-	D3D11_SUBRESOURCE_DATA IndexData;
-	IndexData.pSysMem = CubeIndices;
-
-	D3D11_SUBRESOURCE_DATA SkyIndexData;
-	SkyIndexData.pSysMem = SkyIndices;
-
-	Microsoft::WRL::ComPtr<ID3D11Buffer> IndexBuffer;
-	Device->CreateBuffer(&IndexBufferDesc, &IndexData, &IndexBuffer);
-
-	Microsoft::WRL::ComPtr<ID3D11Buffer> SkyIndexBuffer;
-	Device->CreateBuffer(&SkyIndexBufferDesc, &SkyIndexData, &SkyIndexBuffer);
+		D3D12_BLEND_DESC BlendDesc;
+		BlendDesc.AlphaToCoverageEnable = false;
+		BlendDesc.IndependentBlendEnable = false;
+		BlendDesc.RenderTarget[0] = TargetBlendDesc;
 
 
-	// ------------------------------------------------
-	Microsoft::WRL::ComPtr<ID3D11PixelShader> PixelShader;
-	Microsoft::WRL::ComPtr<ID3DBlob> PixelShaderBlob;
 
-	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/PixelShader_ps.cso", &PixelShaderBlob);
-	Device->CreatePixelShader(PixelShaderBlob->GetBufferPointer(), PixelShaderBlob->GetBufferSize(), nullptr, &PixelShader);
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+		psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
+		psoDesc.pRootSignature = m_rootSignature.Get();
+		psoDesc.VS = { reinterpret_cast<UINT8*>(vertexShader->GetBufferPointer()), vertexShader->GetBufferSize() };
+		psoDesc.PS = { reinterpret_cast<UINT8*>(pixelShader->GetBufferPointer()), pixelShader->GetBufferSize() };
+		psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+		psoDesc.BlendState = BlendDesc;
+		psoDesc.DepthStencilState.DepthEnable = FALSE;
+		psoDesc.DepthStencilState.StencilEnable = FALSE;
+		psoDesc.SampleMask = UINT_MAX;
+		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+		psoDesc.NumRenderTargets = 1;
+		psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+		psoDesc.SampleDesc.Count = 1;
+		m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
+	}
 
-	// ------------------------------------------------
 
-	Microsoft::WRL::ComPtr<ID3D11PixelShader> SkyPixelShader;
-	Microsoft::WRL::ComPtr<ID3DBlob> SkyPixelShaderBlob;
+	m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), m_pipelineState.Get(), IID_PPV_ARGS(&m_commandList));
 
-	D3DReadFileToBlob(L"../Bin/Debug-windows-x86_64/playground/SkyPixelShader_ps.cso", &SkyPixelShaderBlob);
-	Device->CreatePixelShader(SkyPixelShaderBlob->GetBufferPointer(), SkyPixelShaderBlob->GetBufferSize(), nullptr, &SkyPixelShader);
-
-	// ------------------------------------------------
-
-	DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	// ------------------------------------------------
-
-	auto SetViewportSize = [&DeviceContext](float Width, float Height)
 	{
-		D3D11_VIEWPORT ViewportDesc;
-		ViewportDesc.Width = Width;
-		ViewportDesc.Height = Height;
-		ViewportDesc.MinDepth = 0.0f;
-		ViewportDesc.MaxDepth = 1.0f;
-		ViewportDesc.TopLeftX = 0.0f;
-		ViewportDesc.TopLeftY = 0.0f;
+		Vertex triangleVertices[] =
+		{
+			{ { -0.5f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, 0.0f },
+			{ { 0.5f, 0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 0.0f },
+			{ { 0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, 0.0f },
+			{ { -0.5f, 0.5f, 0.0f }, { 1.0f, 0.0f, 0.0f }, 0.0f },
+			{ { 0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f, 1.0f }, 0.0f },
+			{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 0.0f }
+		};
 
-		DeviceContext->RSSetViewports(1, &ViewportDesc);
-	};
-	
-	SetViewportSize(WindowWidth, WindowHeight);
+		const UINT vertexBufferSize = sizeof(triangleVertices);
 
-	// -----------------------------------------------
-
-	struct VSContantBufferLayout
-	{
-		Matrix<float> TransformMatrix;
-		Matrix<float> ViewMatrix;
-		Matrix<float> ProjectionMatrix;
-	};
-
-	D3D11_BUFFER_DESC VsConstantBufferDesc;
-	VsConstantBufferDesc.ByteWidth = sizeof(VSContantBufferLayout);
-	VsConstantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	VsConstantBufferDesc.CPUAccessFlags = false;
-	VsConstantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	VsConstantBufferDesc.MiscFlags = 0;
-	VsConstantBufferDesc.StructureByteStride = 0;
-
-	D3D11_SUBRESOURCE_DATA VSConstantData;
-
-	VSContantBufferLayout VsConstantBL;
-	Microsoft::WRL::ComPtr<ID3D11Buffer> VsConstantBuffer;
-
-	// -----------------------------------------------
-
-	struct PSContantBufferLayout
-	{
-		Vector3f CameraPosition;
-		float UselessData = 1.0f;
-	};
-
-	D3D11_BUFFER_DESC PsConstantBufferDesc;
-	PsConstantBufferDesc.ByteWidth = sizeof(PSContantBufferLayout);
-	PsConstantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	PsConstantBufferDesc.CPUAccessFlags = false;
-	PsConstantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	PsConstantBufferDesc.MiscFlags = 0;
-	PsConstantBufferDesc.StructureByteStride = 0;
-
-	D3D11_SUBRESOURCE_DATA PSConstantData;
-
-	PSContantBufferLayout PsConstantBL;
-	Microsoft::WRL::ComPtr<ID3D11Buffer> PsConstantBuffer;
-
-	// -----------------------------------------------
-
-	struct PCloudBufferLayout
-	{
-		Vector3f CloudColor = Vector3f(1.0f, 1.0f, 1.0f);
-		float StartZ = 5000.0f;
-
-		int Steps = 64;
-		float Height = 10000.0f;
-		float Coverage = 0.8f;
-		float CoveragemapScale = 100000.0f;
-
-		float DensityScale = 0.2f;
-		float BottomRoundness = 0.07f;
-		float TopRoundness = 0.2f;
-		float BottomDensity = 0.15f;
-
-		float TopDensity = 0.9f;
-		float BaseNoiseScale = 20000.0f;
-		float DetailNoiseScale = 5000.0f;
-		float Anvil = 0.5f;
-
-		float TracingStartMaxDistance = 350000;
-		float DetailNoiseIntensity = 0.8f;
-		int LightSteps = 32;
-		float LightStepSize = 100000.0f;
-
-		Vector3f LightDir;
-		float Useless3 = 0.0f;
-	};
-
-	D3D11_BUFFER_DESC PsCloudBufferDesc;
-	PsCloudBufferDesc.ByteWidth = sizeof(PCloudBufferLayout);
-	PsCloudBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	PsCloudBufferDesc.CPUAccessFlags = false;
-	PsCloudBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-	PsCloudBufferDesc.MiscFlags = 0;
-	PsCloudBufferDesc.StructureByteStride = 0;
-
-	D3D11_SUBRESOURCE_DATA PSCloudData;
-
-	PCloudBufferLayout PsCloudBL;
-	Microsoft::WRL::ComPtr<ID3D11Buffer> PsCloudBuffer;
-
-	// -----------------------------------------------
+		CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
+		auto desc = CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize);
+		m_device->CreateCommittedResource(
+			&heapProps,
+			D3D12_HEAP_FLAG_NONE,
+			&desc,
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&m_vertexBuffer));
 
 
-	D3D11_TEXTURE2D_DESC DepthDesc;
-	DepthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	DepthDesc.Width = WindowWidth;
-	DepthDesc.Height = WindowHeight;
-	DepthDesc.MipLevels = 1;
-	DepthDesc.CPUAccessFlags = false;
-	DepthDesc.MiscFlags = 0;
-	DepthDesc.ArraySize = 1;
-	DepthDesc.SampleDesc.Count = 1;
-	DepthDesc.SampleDesc.Quality = 0;
-	DepthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
-	DepthDesc.Usage = D3D11_USAGE_DEFAULT;
+		// Copy the triangle data to the vertex buffer.
+		UINT8* pVertexDataBegin;
+		CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
+		m_vertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin));
+		memcpy(pVertexDataBegin, triangleVertices, sizeof(triangleVertices));
+		m_vertexBuffer->Unmap(0, nullptr);
 
-	Microsoft::WRL::ComPtr<ID3D11Texture2D> DepthStencilTexture;
-	Device->CreateTexture2D(&DepthDesc, NULL, &DepthStencilTexture);
+		// Initialize the vertex buffer view.
+		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
+		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
+		m_vertexBufferView.SizeInBytes = vertexBufferSize;
+	}
 
+	// -----------------------------------------------------------
 
-	D3D11_DEPTH_STENCIL_VIEW_DESC DepthViewDesc;
-	DepthViewDesc.Format = DepthDesc.Format;
-	DepthViewDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-	DepthViewDesc.Flags = 0;
-	DepthViewDesc.Texture2D.MipSlice = 0;
-
-	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> DepthStencilView;
-	Device->CreateDepthStencilView(DepthStencilTexture.Get(), &DepthViewDesc, &DepthStencilView);
+	const UINT ConstantBufferSize = sizeof(VSConstantBufferLayout);
+	m_device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(ConstantBufferSize), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_constantBuffer));
 
 
-	D3D11_DEPTH_STENCIL_DESC DepthStencilDesc;
-	DepthStencilDesc.DepthEnable = true;
-	DepthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-	DepthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS;
-	DepthStencilDesc.StencilEnable = true;
-	DepthStencilDesc.StencilWriteMask = 255;
-	DepthStencilDesc.StencilReadMask = 255;
-	DepthStencilDesc.FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS;
-	DepthStencilDesc.FrontFace.StencilFailOp = D3D11_STENCIL_OP_REPLACE;
-	DepthStencilDesc.FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_REPLACE;
-	DepthStencilDesc.FrontFace.StencilPassOp = D3D11_STENCIL_OP_REPLACE;
-	
-	DepthStencilDesc.BackFace.StencilFunc = D3D11_COMPARISON_NEVER;
-	DepthStencilDesc.BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP;
-	DepthStencilDesc.BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_KEEP;
-	DepthStencilDesc.BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP;
+	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+	cbvDesc.BufferLocation = m_constantBuffer->GetGPUVirtualAddress();
+	cbvDesc.SizeInBytes = ConstantBufferSize;
+	m_device->CreateConstantBufferView(&cbvDesc, m_ConstantHeap->GetCPUDescriptorHandleForHeapStart());
 
-	Microsoft::WRL::ComPtr<ID3D11DepthStencilState> DepthState;
-	Device->CreateDepthStencilState(&DepthStencilDesc, &DepthState);
 
-	DeviceContext->OMSetDepthStencilState(DepthState.Get(), 128);
+	CD3DX12_RANGE readRange(0, 0);
+	m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_pCbvDataBegin));
+	memcpy(m_pCbvDataBegin, &VSConstantBuffer, sizeof(VSConstantBuffer));
 
-	// -----------------------------------------------------------------------
+
+	// -------------------------------------------------------------------
 
 	unsigned char* CoverageTextureBlob;
 	int CoverageImageWidth, CoverageImageHeight, CoverageImageNumberOfChannels;
@@ -423,57 +442,71 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	CoverageTextureBlob = stbi_load("../Content/T_WeatherNoiseBetter.png",
 		&CoverageImageWidth, &CoverageImageHeight, &CoverageImageNumberOfChannels, 0);
 
-	Microsoft::WRL::ComPtr<ID3D11Texture2D> CoverageTexture;
-	
-	D3D11_TEXTURE2D_DESC CoverageTextureDescription;
-	CoverageTextureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	CoverageTextureDescription.Height = CoverageImageHeight;
-	CoverageTextureDescription.Width = CoverageImageWidth;
-	CoverageTextureDescription.ArraySize = 1;
-	CoverageTextureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-	CoverageTextureDescription.CPUAccessFlags = 0;
-	CoverageTextureDescription.MiscFlags = 0;
-	CoverageTextureDescription.SampleDesc.Count = 1;
-	CoverageTextureDescription.SampleDesc.Quality = 0;
-	CoverageTextureDescription.Usage = D3D11_USAGE_DEFAULT;
-	CoverageTextureDescription.MipLevels = 1;
 
-	D3D11_SUBRESOURCE_DATA CoverageTextureData;
-	CoverageTextureData.pSysMem = CoverageTextureBlob;
-	CoverageTextureData.SysMemPitch = CoverageImageNumberOfChannels * CoverageImageWidth;
-	
-	Device->CreateTexture2D(&CoverageTextureDescription, &CoverageTextureData, &CoverageTexture);
+	D3D12_RESOURCE_DESC CoverageTextureDesc = {};
+	CoverageTextureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	CoverageTextureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	CoverageTextureDesc.Width = CoverageImageWidth;
+	CoverageTextureDesc.Height = CoverageImageHeight;
+	CoverageTextureDesc.DepthOrArraySize = 1;
+	CoverageTextureDesc.MipLevels = 1;
+	CoverageTextureDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+	CoverageTextureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	CoverageTextureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	CoverageTextureDesc.SampleDesc.Count = 1;
 
-	// ------------------------------------------------------------------
 
-	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> CoverageTextureResourceView;
+	D3D12_HEAP_PROPERTIES CoverageTextureHeapProperties = {};
+	CoverageTextureHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+	CoverageTextureHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	CoverageTextureHeapProperties.CreationNodeMask = 0;
+	CoverageTextureHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+	CoverageTextureHeapProperties.VisibleNodeMask = 0;
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC CoverageTextureResourceViewDesc;
-	CoverageTextureResourceViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	CoverageTextureResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-	CoverageTextureResourceViewDesc.Texture2D.MipLevels = 1;
-	CoverageTextureResourceViewDesc.Texture2D.MostDetailedMip = 0;
+	m_device->CreateCommittedResource(&CoverageTextureHeapProperties, D3D12_HEAP_FLAG_NONE, &CoverageTextureDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_CoverageTexture));
 
-	Device->CreateShaderResourceView(CoverageTexture.Get(), &CoverageTextureResourceViewDesc, &CoverageTextureResourceView);
 
-	// -----------------------------------------------------------------
 
-	Microsoft::WRL::ComPtr<ID3D11SamplerState> CoverageSamplerState;
 
-	D3D11_SAMPLER_DESC CoverageSamplerDesc;
-	CoverageSamplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-	CoverageSamplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-	CoverageSamplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-	CoverageSamplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-	CoverageSamplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
-	CoverageSamplerDesc.MaxAnisotropy = 16;
-	CoverageSamplerDesc.MinLOD = 0;
-	CoverageSamplerDesc.MaxLOD = 1;
-	CoverageSamplerDesc.MipLODBias = 0;
+	UINT64 uploadBufferSize;
+	auto Desc = m_CoverageTexture->GetDesc();
+	m_device->GetCopyableFootprints(&Desc, 0, 1, 0, nullptr, nullptr, nullptr, &uploadBufferSize);
 
-	Device->CreateSamplerState(&CoverageSamplerDesc, &CoverageSamplerState);
+	m_device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&textureUploadHeap));
 
-	// ----------------------------------------------------------------
+
+
+	D3D12_SUBRESOURCE_DATA textureData = {};
+	textureData.pData = CoverageTextureBlob;
+	textureData.RowPitch = CoverageImageWidth * sizeof(unsigned char) * 4;
+	textureData.SlicePitch = textureData.RowPitch * CoverageImageHeight;
+
+
+
+	UpdateSubresources(m_commandList.Get(), m_CoverageTexture.Get(), textureUploadHeap.Get(), 0, 0, 1, &textureData);
+	m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_CoverageTexture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.Format = CoverageTextureDesc.Format;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+
+	UINT S = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	CD3DX12_CPU_DESCRIPTOR_HANDLE H(m_ConstantHeap->GetCPUDescriptorHandleForHeapStart());
+	H.Offset(1, S);
+
+	m_device->CreateShaderResourceView(m_CoverageTexture.Get(), &srvDesc, H);
+
+	// -----------------------------------------------------------------------
 
 	unsigned char* WorleyTextureBlob;
 	int WorleyImageWidth, WorleyImageHeight, WorleyImageNumberOfChannels;
@@ -481,39 +514,67 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	WorleyTextureBlob = stbi_load("../Content/T_WorleyNoise.png",
 		&WorleyImageWidth, &WorleyImageHeight, &WorleyImageNumberOfChannels, 0);
 
-	Microsoft::WRL::ComPtr<ID3D11Texture3D> WorleyTexture;
+	D3D12_RESOURCE_DESC WorleyBaseTextureDesc = {};
+	WorleyBaseTextureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+	WorleyBaseTextureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	WorleyBaseTextureDesc.Width = 128;
+	WorleyBaseTextureDesc.Height = 128;
+	WorleyBaseTextureDesc.DepthOrArraySize = 128;
+	WorleyBaseTextureDesc.DepthOrArraySize = 1;
+	WorleyBaseTextureDesc.MipLevels = 1;
+	WorleyBaseTextureDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+	WorleyBaseTextureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	WorleyBaseTextureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	WorleyBaseTextureDesc.SampleDesc.Count = 1;
 
-	D3D11_TEXTURE3D_DESC WorleyTextureDescription;
-	WorleyTextureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	WorleyTextureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-	WorleyTextureDescription.Height = 128;
-	WorleyTextureDescription.Width = 128;
-	WorleyTextureDescription.Depth = 128;
-	WorleyTextureDescription.CPUAccessFlags = 0;
-	WorleyTextureDescription.MiscFlags = 0;
-	WorleyTextureDescription.Usage = D3D11_USAGE_DEFAULT;
-	WorleyTextureDescription.MipLevels = 1;
 
-	D3D11_SUBRESOURCE_DATA WorleyTextureData;
-	WorleyTextureData.pSysMem = WorleyTextureBlob;
-	WorleyTextureData.SysMemPitch = sizeof(char) * WorleyImageNumberOfChannels * 128;
-	WorleyTextureData.SysMemSlicePitch = sizeof(char) * WorleyImageNumberOfChannels * 128 * 128;
+	D3D12_HEAP_PROPERTIES WorleyBaseDestProperties = {};
+	WorleyBaseDestProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+	WorleyBaseDestProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	WorleyBaseDestProperties.CreationNodeMask = 0;
+	WorleyBaseDestProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+	WorleyBaseDestProperties.VisibleNodeMask = 0;
 
-	Device->CreateTexture3D(&WorleyTextureDescription, &WorleyTextureData, &WorleyTexture);
+	m_device->CreateCommittedResource(&WorleyBaseDestProperties, D3D12_HEAP_FLAG_NONE, &WorleyBaseTextureDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_WorleyBaseTexture));
 
-	// ----------------------------------------------------------------
 
-	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> WorleyTextureResourceView;
+	Desc = m_WorleyBaseTexture->GetDesc();
+	m_device->GetCopyableFootprints(&Desc, 0, 1, 0, nullptr, nullptr, nullptr, &uploadBufferSize);
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC WorleyTextureResourceViewDesc;
-	WorleyTextureResourceViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	WorleyTextureResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
-	WorleyTextureResourceViewDesc.Texture3D.MipLevels = 1;
-	WorleyTextureResourceViewDesc.Texture3D.MostDetailedMip = 0;
+	m_device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_WorleyBaseUpload));
 
-	Device->CreateShaderResourceView(WorleyTexture.Get(), &WorleyTextureResourceViewDesc, &WorleyTextureResourceView);
 
-	// -------------------------------------------------------------------
+	D3D12_SUBRESOURCE_DATA WorleyBasetextureData = {};
+	WorleyBasetextureData.pData = WorleyTextureBlob;
+	WorleyBasetextureData.RowPitch = sizeof(char) * WorleyImageNumberOfChannels * 128;
+	WorleyBasetextureData.SlicePitch = sizeof(char) * WorleyImageNumberOfChannels * 128 * 128;
+
+
+	UpdateSubresources(m_commandList.Get(), m_WorleyBaseTexture.Get(), m_WorleyBaseUpload.Get(), 0, 0, 1, &WorleyBasetextureData);
+	m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_WorleyBaseTexture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
+
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvWorleyBaseDesc = {};
+	srvWorleyBaseDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvWorleyBaseDesc.Format = WorleyBaseTextureDesc.Format;
+	srvWorleyBaseDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+	srvWorleyBaseDesc.Texture3D.MipLevels = 1;
+	srvWorleyBaseDesc.Texture3D.MostDetailedMip = 0;
+	srvWorleyBaseDesc.Texture3D.ResourceMinLODClamp = 0;
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE H1(m_ConstantHeap->GetCPUDescriptorHandleForHeapStart());
+	H1.Offset(2, S);
+
+	m_device->CreateShaderResourceView(m_WorleyBaseTexture.Get(), &srvWorleyBaseDesc, H1);
+
+	// -------------------------------------------------------------
 
 	unsigned char* WorleyDetailTextureBlob;
 	int WorleyDetailImageWidth, WorleyDetailImageHeight, WorleyDetailImageNumberOfChannels;
@@ -521,61 +582,195 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	WorleyDetailTextureBlob = stbi_load("../Content/T_WorleyNoise_Detail.png",
 		&WorleyDetailImageWidth, &WorleyDetailImageHeight, &WorleyDetailImageNumberOfChannels, 0);
 
-	Microsoft::WRL::ComPtr<ID3D11Texture3D> WorleyDetailTexture;
+	D3D12_RESOURCE_DESC WorleyDetailTextureDesc = {};
+	WorleyDetailTextureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+	WorleyDetailTextureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	WorleyDetailTextureDesc.Width = 32;
+	WorleyDetailTextureDesc.Height = 32;
+	WorleyDetailTextureDesc.DepthOrArraySize = 32;
+	WorleyDetailTextureDesc.DepthOrArraySize = 1;
+	WorleyDetailTextureDesc.MipLevels = 1;
+	WorleyDetailTextureDesc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+	WorleyDetailTextureDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	WorleyDetailTextureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	WorleyDetailTextureDesc.SampleDesc.Count = 1;
 
-	D3D11_TEXTURE3D_DESC WorleyDetailTextureDescription;
-	WorleyDetailTextureDescription.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	WorleyDetailTextureDescription.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-	WorleyDetailTextureDescription.Height = 32;
-	WorleyDetailTextureDescription.Width = 32;
-	WorleyDetailTextureDescription.Depth = 32;
-	WorleyDetailTextureDescription.CPUAccessFlags = 0;
-	WorleyDetailTextureDescription.MiscFlags = 0;
-	WorleyDetailTextureDescription.Usage = D3D11_USAGE_DEFAULT;
-	WorleyDetailTextureDescription.MipLevels = 1;
 
-	D3D11_SUBRESOURCE_DATA WorleyDetailTextureData;
-	WorleyDetailTextureData.pSysMem = WorleyDetailTextureBlob;
-	WorleyDetailTextureData.SysMemPitch = sizeof(char) * WorleyDetailImageNumberOfChannels * 32;
-	WorleyDetailTextureData.SysMemSlicePitch = sizeof(char) * WorleyDetailImageNumberOfChannels * 32 * 32;
+	D3D12_HEAP_PROPERTIES WorleyDetailDestProperties = {};
+	WorleyDetailDestProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+	WorleyDetailDestProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	WorleyDetailDestProperties.CreationNodeMask = 0;
+	WorleyDetailDestProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+	WorleyDetailDestProperties.VisibleNodeMask = 0;
 
-	Device->CreateTexture3D(&WorleyDetailTextureDescription, &WorleyDetailTextureData, &WorleyDetailTexture);
+	m_device->CreateCommittedResource(&WorleyDetailDestProperties, D3D12_HEAP_FLAG_NONE, &WorleyDetailTextureDesc,
+		D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&m_WorleyDetailTexture));
 
-	// ----------------------------------------------------------------
 
-	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> WorleyDetailTextureResourceView;
+	Desc = m_WorleyDetailTexture->GetDesc();
+	m_device->GetCopyableFootprints(&Desc, 0, 1, 0, nullptr, nullptr, nullptr, &uploadBufferSize);
 
-	D3D11_SHADER_RESOURCE_VIEW_DESC WorleyDetailTextureResourceViewDesc;
-	WorleyDetailTextureResourceViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	WorleyDetailTextureResourceViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
-	WorleyDetailTextureResourceViewDesc.Texture3D.MipLevels = 1;
-	WorleyDetailTextureResourceViewDesc.Texture3D.MostDetailedMip = 0;
+	m_device->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD),
+		D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize),
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&m_WorleyDetailUpload));
 
-	Device->CreateShaderResourceView(WorleyDetailTexture.Get(), &WorleyDetailTextureResourceViewDesc, &WorleyDetailTextureResourceView);
 
-	// -------------------------------------------------------------------
+	D3D12_SUBRESOURCE_DATA WorleyDetailtextureData = {};
+	WorleyDetailtextureData.pData = WorleyDetailTextureBlob;
+	WorleyDetailtextureData.RowPitch = sizeof(char) * WorleyDetailImageNumberOfChannels * 32;
+	WorleyDetailtextureData.SlicePitch = sizeof(char) * WorleyDetailImageNumberOfChannels * 32 * 32;
 
-	D3D11_RENDER_TARGET_BLEND_DESC TargetBlendDesc;
-	TargetBlendDesc.BlendEnable = true;
-	TargetBlendDesc.SrcBlend = D3D11_BLEND_SRC_ALPHA;
-	TargetBlendDesc.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-	TargetBlendDesc.BlendOp = D3D11_BLEND_OP_ADD;
-	TargetBlendDesc.SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
-	TargetBlendDesc.DestBlendAlpha = D3D11_BLEND_DEST_ALPHA;
-	TargetBlendDesc.BlendOpAlpha = D3D11_BLEND_OP_ADD;
-	TargetBlendDesc.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-	D3D11_BLEND_DESC BlendDesc;
-	BlendDesc.AlphaToCoverageEnable = false;
-	BlendDesc.IndependentBlendEnable = false;
-	BlendDesc.RenderTarget[0] = TargetBlendDesc;
+	UpdateSubresources(m_commandList.Get(), m_WorleyDetailTexture.Get(), m_WorleyDetailUpload.Get(), 0, 0, 1, &WorleyDetailtextureData);
+	m_commandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(m_WorleyDetailTexture.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE));
 
-	Microsoft::WRL::ComPtr<ID3D11BlendState> BlendState;
-	Device->CreateBlendState(&BlendDesc, &BlendState);
 
-	DeviceContext->OMSetBlendState(BlendState.Get(), NULL, 0xffffffff);
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvWorleyDetailDesc = {};
+	srvWorleyDetailDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvWorleyDetailDesc.Format = WorleyDetailTextureDesc.Format;
+	srvWorleyDetailDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE3D;
+	srvWorleyDetailDesc.Texture3D.MipLevels = 1;
+	srvWorleyDetailDesc.Texture3D.MostDetailedMip = 0;
+	srvWorleyDetailDesc.Texture3D.ResourceMinLODClamp = 0;
 
-	// -------------------------------------------------------------------
+	CD3DX12_CPU_DESCRIPTOR_HANDLE H2(m_ConstantHeap->GetCPUDescriptorHandleForHeapStart());
+	H2.Offset(3, S);
+
+	m_device->CreateShaderResourceView(m_WorleyDetailTexture.Get(), &srvWorleyDetailDesc, H2);
+
+	// -----------------------------------------------------------
+
+	const UINT ConstantBufferSize1 = sizeof(PCloudBufferLayout);
+	m_device->CreateCommittedResource(&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), D3D12_HEAP_FLAG_NONE,
+		&CD3DX12_RESOURCE_DESC::Buffer(ConstantBufferSize1), D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_cloudBuffer));
+
+
+	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc1 = {};
+	cbvDesc1.BufferLocation = m_cloudBuffer->GetGPUVirtualAddress();
+	cbvDesc1.SizeInBytes = ConstantBufferSize1;
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE H5(m_ConstantHeap->GetCPUDescriptorHandleForHeapStart());
+	H5.Offset(4, S);
+	m_device->CreateConstantBufferView(&cbvDesc1, H5);
+
+	CD3DX12_RANGE readRange1(0, 0);
+	m_cloudBuffer->Map(0, &readRange1, reinterpret_cast<void**>(&m_pCloudbvDataBegin));
+	memcpy(m_pCloudbvDataBegin, &PsCloudBL, sizeof(PsCloudBL));
+
+	// -------------------------------------------------
+
+	m_commandList->Close();
+
+	{
+		ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+		m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+	}
+
+	{
+		m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
+		m_fenceValue = 1;
+
+		m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+		if (m_fenceEvent == nullptr)
+		{
+			HRESULT_FROM_WIN32(GetLastError());
+		}
+
+		WaitForPreviousFrame();
+	}
+}
+
+
+void PopulateCommandList()
+{
+	m_commandAllocator->Reset();
+	m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
+
+	m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+	m_commandList->RSSetViewports(1, &m_viewport);
+	m_commandList->RSSetScissorRects(1, &m_scissorRect);
+
+	ID3D12DescriptorHeap* ppHeaps[] = { m_ConstantHeap.Get() };
+	m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+	m_commandList->SetGraphicsRootDescriptorTable(0, m_ConstantHeap->GetGPUDescriptorHandleForHeapStart());
+
+	auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	m_commandList->ResourceBarrier(1, &barrier);
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+	m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+
+
+	// Record commands.
+	const float clearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
+	m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+	m_commandList->DrawInstanced(6, 1, 0, 0);
+
+
+
+
+
+	ppHeaps[0] = m_ImGuiHeap.Get();
+	m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
+
+	ImGui::Render();
+	ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), m_commandList.Get());
+
+	// Indicate that the back buffer will now be used to present.
+	barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+	m_commandList->ResourceBarrier(1, &barrier);
+
+
+	m_commandList->Close();
+	//WaitForPreviousFrame();
+}
+
+
+void OnRender()
+{
+	PopulateCommandList();
+
+	ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
+	m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
+
+	m_swapChain->Present(0, 0);
+
+	WaitForPreviousFrame();
+}
+
+
+
+int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+	PSTR lpCmdLine, int nCmdShow)
+{
+	Window::Startup();
+
+	MainWindow = new Window(L"DxWindow", WindowWidth, WindowHeight);
+
+	AllocConsole();
+
+	static std::ofstream conout("CONOUT$", std::ios::out);
+	// Set std::cout stream buffer to conout's buffer (aka redirect/fdreopen)
+	std::cout.rdbuf(conout.rdbuf());
+
+	MainWindow->Tick(1);
+
+	LoadPipeline();
+	LoadAssets();
+
+
+	D3D12_DESCRIPTOR_HEAP_DESC ImGuiHeapDesc = {};
+	ImGuiHeapDesc.NumDescriptors = 3;
+	ImGuiHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	ImGuiHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	m_device->CreateDescriptorHeap(&ImGuiHeapDesc, IID_PPV_ARGS(&m_ImGuiHeap));
+
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -584,19 +779,21 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	ImGui::StyleColorsDark();
 
-	ImGui_ImplWin32_Init(MainWindow.GetHandle());
-	ImGui_ImplDX11_Init(Device.Get(), DeviceContext.Get());
+	m_ImGuiHeap->SetName(L"GuiHeap");
+
+	ImGui_ImplWin32_Init(MainWindow->GetHandle());
+	ImGui_ImplDX12_Init(m_device.Get(), FrameCount, DXGI_FORMAT_R8G8B8A8_UNORM, m_ImGuiHeap.Get(),
+		m_ImGuiHeap->GetCPUDescriptorHandleForHeapStart(), m_ImGuiHeap->GetGPUDescriptorHandleForHeapStart());
 
 	bool show_demo_window = true;
 
-	// -------------------------------------------------------------------
 
-	while (MainWindow.IsOpen())
+	while (MainWindow->IsOpen())
 	{
-		if (MainWindow.IsRightClickDown())
+		if (MainWindow->IsRightClickDown())
 		{
-			float CameraPitchOffset = MouseSpeed * -MainWindow.MouseDeltaY;
-			float CameraYawOffset = MouseSpeed * MainWindow.MouseDeltaX;
+			float CameraPitchOffset = MouseSpeed * -MainWindow->MouseDeltaY;
+			float CameraYawOffset = MouseSpeed * MainWindow->MouseDeltaX;
 
 			Rotatorf DeltaRotation = Rotatorf(CameraPitchOffset, CameraYawOffset, 0.0f);
 			CameraRotation = Rotatorf::CombineRotators(CameraRotation, DeltaRotation);
@@ -608,127 +805,58 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		}
 		std::cout << CameraRotation.ToString() << std::endl;
 
-		Vector3f CameraForwardVector = CameraRotation.Vector();
-		Vector3f CameraRightVector = Vector3f::CrossProduct(Vector3f::UpVector, CameraForwardVector);
+		Vector3f ForwardVector = CameraRotation.Vector();
+		Vector3f RightVector = Vector3f::CrossProduct(Vector3f::UpVector, ForwardVector);
 
-		Vector3f CameraForwardOffset = CameraForwardVector * MainWindow.GetUpValue() * CameraSpeed;
-		Vector3f CameraRightOffset = CameraRightVector * MainWindow.GetRightValue() * CameraSpeed;
+		Vector3f CameraForwardOffset = ForwardVector * MainWindow->GetUpValue() * CameraSpeed;
+		Vector3f CameraRightOffset = RightVector * MainWindow->GetRightValue() * CameraSpeed;
 
-		CameraPosition = CameraPosition + CameraForwardOffset + CameraRightOffset;
+		//CameraPosition = CameraPosition + CameraForwardOffset + CameraRightOffset;
 		std::cout << CameraPosition.ToString() << std::endl;
-		
-		MainWindow.Tick(1);
 
-		// ----------------------------------------------------------------
+		// ---------------------------------------------------------
 
 		auto Time = std::chrono::high_resolution_clock();
-		auto Now =  Time.now();
+		auto Now = Time.now();
 
-		float TimeSeconds = (float)std::chrono::duration_cast<std::chrono::milliseconds>(Now.time_since_epoch()).count();
+		float TimeSeconds = (float)std::chrono::duration_cast<std::chrono::seconds>(Now.time_since_epoch()).count();
 
-		Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
+		MainWindow->Tick(1);
 
- 		Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f,
-  			(float)WindowWidth / (float)WindowHeight, 0.1f, 1000.0f);
+		{
+			Vector3f CameraForwardVector = CameraRotation.Vector();
 
-		VsConstantBL.ViewMatrix = CameraViewMatrix;
-		VsConstantBL.ProjectionMatrix = ProjectionMatrix;
+			Vector3f SkyPosition = CameraPosition + CameraForwardVector * 1.0f;
+			Rotatorf SkyRotation = CameraRotation;
+			Vector3f SkyScale = Vector3f(5.0f);
 
-		// ---------------------------------------------------------------
-		
-		float BlackColor[] = {0.0f, 0.0f, 0.0f, 0.0f};
-		
-		ID3D11ShaderResourceView* nullRTV = nullptr;
-		DeviceContext->PSSetShaderResources(0, 1, &nullRTV);
+			Matrix<float> TransformMatrix = ScaleRotationTranslationMatrix<float>(SkyScale, SkyRotation, SkyPosition);
+			VSConstantBuffer.TransformMatrix = TransformMatrix;
 
-		DeviceContext->ClearRenderTargetView(CloudRenderTargetView.Get(), BlackColor);
-		DeviceContext->OMSetRenderTargets(1, CloudRenderTargetView.GetAddressOf(), NULL);
-		
-		SetViewportSize(WindowWidth / 2, WindowHeight / 2);
+			Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
+			VSConstantBuffer.ViewMatrix = CameraViewMatrix;
 
-		// ----------------------------------------------------------------
+			Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f, (float)WindowWidth / (float)WindowHeight, 0.1f, 100.0f);
+			VSConstantBuffer.ProjectionMatrix = ProjectionMatrix;
 
-		const UINT stride = sizeof(Vertex);
-		const UINT offset = 0;
-		DeviceContext->IASetVertexBuffers(0, 1, VertexBuffer.GetAddressOf(), &stride, &offset);
-		DeviceContext->IASetInputLayout(VertexInputLayout.Get());
-		DeviceContext->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
+			// ---------------------------------------------------------
 
-		Matrix<float> CubeTransformMatrix = ScaleRotationTranslationMatrix<float>(Vector3f(1.0f), Rotatorf::ZeroRotator, Vector3f(0.0f, 0.0, 5.0f));
-		VsConstantBL.TransformMatrix = CubeTransformMatrix;
-
-		VSConstantData.pSysMem = &VsConstantBL;
-		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
-		DeviceContext->VSSetConstantBuffers(0, 1, VsConstantBuffer.GetAddressOf());
-
-		DeviceContext->PSSetShader(SkyPixelShader.Get(), 0, 0);
-
-		DeviceContext->DrawIndexed(36, 0, 0);
-
-		// -----------------------------------------------------------------
-
-		DeviceContext->IASetVertexBuffers(0, 1, SkyVertexBuffer.GetAddressOf(), &stride, &offset);
-		DeviceContext->IASetInputLayout(SkyVertexInputLayout.Get());
-		DeviceContext->IASetIndexBuffer(SkyIndexBuffer.Get(), DXGI_FORMAT_R16_UINT, 0);
-
-		Vector3f SkyPosition = CameraPosition + CameraForwardVector * 1.0f;
-		Rotatorf SkyRotation = CameraRotation;
-		Vector3f SkyScale = Vector3f(10.0f);
-
-		Matrix<float> SkyTransformMatrix = ScaleRotationTranslationMatrix<float>(SkyScale, SkyRotation, SkyPosition);
-		VsConstantBL.TransformMatrix = SkyTransformMatrix;
-
-		VSConstantData.pSysMem = &VsConstantBL;
-		Device->CreateBuffer(&VsConstantBufferDesc, &VSConstantData, &VsConstantBuffer);
-		DeviceContext->VSSetConstantBuffers(0, 1, VsConstantBuffer.GetAddressOf());
-
-		DeviceContext->PSSetShader(SkyPixelShader.Get(), 0, 0);
-
-		DeviceContext->PSSetShaderResources(0, 1, CoverageTextureResourceView.GetAddressOf());
-		DeviceContext->PSSetShaderResources(1, 1, WorleyTextureResourceView.GetAddressOf());
-		DeviceContext->PSSetShaderResources(2, 1, WorleyDetailTextureResourceView.GetAddressOf());
-		DeviceContext->PSSetSamplers(0, 1, CoverageSamplerState.GetAddressOf());
-
-
-		PsConstantBL.CameraPosition = CameraPosition;
-		PSConstantData.pSysMem = &PsConstantBL;
-
-		Device->CreateBuffer(&PsConstantBufferDesc, &PSConstantData, &PsConstantBuffer);
-		DeviceContext->PSSetConstantBuffers(0, 1, PsConstantBuffer.GetAddressOf());
-
-
-		PSCloudData.pSysMem = &PsCloudBL;
-		Device->CreateBuffer(&PsCloudBufferDesc, &PSCloudData, &PsCloudBuffer);
-		DeviceContext->PSSetConstantBuffers(1, 1, PsCloudBuffer.GetAddressOf());
-
-		DeviceContext->DrawIndexed(6, 0, 0);
-
-		// -----------------------------------------------------------------
-
-		DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), DepthStencilView.Get());
-		DeviceContext->ClearRenderTargetView(BackBufferView.Get(), ClearColor);
-		DeviceContext->ClearDepthStencilView(DepthStencilView.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+			memcpy(m_pCbvDataBegin, &VSConstantBuffer, sizeof(VSConstantBuffer));
+			memcpy(m_pCloudbvDataBegin, &PsCloudBL, sizeof(PsCloudBL));
+		}
 
 		SetViewportSize(WindowWidth, WindowHeight);
-		DeviceContext->PSSetShader(PixelShader.Get(), 0, 0);
 
-		DeviceContext->PSSetShaderResources(0, 1, CloudShaderView.GetAddressOf());
-		DeviceContext->PSSetSamplers(0, 1, CoverageSamplerState.GetAddressOf());
 
-		DeviceContext->DrawIndexed(6, 0, 0);
 
-		// -----------------------------------------------------------------
 
-		ImGui_ImplDX11_NewFrame();
+		ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
 		ImGui::NewFrame();
 
-		// 		if (show_demo_window)
-		// 			ImGui::ShowDemoWindow(&show_demo_window);
-
 		bool show_another_window = true;
-
 		ImGui::Begin("Setting", &show_another_window, ImGuiWindowFlags_::ImGuiWindowFlags_NoTitleBar);
+
 
 		ImGui::ColorEdit3("CloudColor", &PsCloudBL.CloudColor.X);
 		ImGui::SliderInt("Steps", &PsCloudBL.Steps, 2, 256);
@@ -742,7 +870,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderFloat("BottomDensity", &PsCloudBL.BottomDensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TopDensity", &PsCloudBL.TopDensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("BaseNoiseScale", &PsCloudBL.BaseNoiseScale, 5000.0f, 50000.0f, "%1f");
-		ImGui::SliderFloat("DetailNoiseScale", &PsCloudBL.DetailNoiseScale, 500.0f, 10000.0f, "%1f");
+		ImGui::SliderFloat("DetailNoiseScale", &PsCloudBL.DetailNoiseScale, 500.0f, 30000.0f, "%1f");
 		ImGui::SliderFloat("DetailNoiseIntensity", &PsCloudBL.DetailNoiseIntensity, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("Anvil", &PsCloudBL.Anvil, 0.0f, 1.0f, "%1f");
 		ImGui::SliderFloat("TracingStartMaxDistance", &PsCloudBL.TracingStartMaxDistance, 100000.0, 500000.0, "%1f");
@@ -751,37 +879,23 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderFloat3("LightDirection", &LightDirection.Pitch, 0.0, 360.0, "%1f");
 
 		PsCloudBL.LightDir = LightDirection.Vector();
+		CameraPosition = CameraPosition + CameraForwardOffset + CameraRightOffset;
+		PsCloudBL.CameraPosition = CameraPosition;
+
 
 		ImGui::End();
 
 
-		ImGui::Render();
-		//DeviceContext->OMSetRenderTargets(1, BackBufferView.GetAddressOf(), NULL);
-		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+		ImGui::EndFrame();
 
-		// -----------------------------------------------------------------
 
-		SwapChain->Present(0, 0);
+		OnRender();
 	}
 
-	ImGui_ImplDX11_Shutdown();
+
+	ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
-
-	VertexShader.Reset();
-	VertexShaderBlob.Reset();
-	PixelShader.Reset();
-	PixelShaderBlob.Reset();
-
-	VertexBuffer.Reset();
-	VertexInputLayout.Reset();
-
-	BackBufferView.Reset();
-	BackBuffer.Reset();
-
-	SwapChain.Reset();
-	DeviceContext.Reset();
-	Device.Reset();
 
 	Window::ShutDown();
 

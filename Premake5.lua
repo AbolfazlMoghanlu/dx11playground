@@ -34,8 +34,10 @@ project "playground"
 
 	links
 	{
-		"d3d11.lib",
-		"D3DCompiler.lib"
+		"d3d12.lib",
+		"D3DCompiler.lib",
+		"DXGI.lib",
+		"dxguid.lib"
 	}
 	
 	libdirs
