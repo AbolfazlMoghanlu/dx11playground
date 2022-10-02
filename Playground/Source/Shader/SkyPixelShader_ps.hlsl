@@ -62,7 +62,7 @@ float DensityAtPosition(float3 Position, float LayerHeight)
 	float4 Worley = WorleyTexture.Sample(CoverageTextureSampler, Position.xzy / BaseNoiseScale);
 	float4 WorleyDetail = WorleyDetailTexture.Sample(CoverageTextureSampler, Position.xzy / DetailNoiseScale);
 
-	//return WorleyDetail.x * DensityScale;
+	//return CoverageSampled.x * DensityScale;
 
 	float SNS = Remap(Worley.r, (Worley.g * 0.625 + Worley.b * 0.25 + Worley.a * 0.125) - 1, 1, 0, 1);
 	float DN = WorleyDetail.r * 0.625 + WorleyDetail.g * 0.25 + WorleyDetail.b * 0.125;
@@ -118,6 +118,10 @@ float3 CameraToWorldPosition = WorldPosition.xyz - CameraPosition;
 
 	bool FullOpace = false;
 
+	float Trans = 0.0f;
+	bool FullTrans = false;
+
+
 	[loop] for (int i = 0; i < Steps; i++)
 	{
 		if (!FullOpace)
@@ -130,9 +134,36 @@ float3 CameraToWorldPosition = WorldPosition.xyz - CameraPosition;
 			FullOpace = Density > 0.99;
 		}
 
+		//if (!FullTrans)
+		//{
+		//	float3 CurrentLightPosition = CurrentWorldPosition;
+		//	float3 LightStepVector = LightDir * LightStepSize / LightSteps / 100; 
+		//
+		//	[loop] for(int j = 0; j < LightSteps; j++)
+		//	{
+		//		if (!FullTrans)
+		//		{
+		//			float3 RayDirection = normalize(CurrentLightPosition - CameraPosition);
+		//			float i1 = RayIntersection(CameraPosition, RayDirection, Origin, PlanetRadius);
+		//			float i2 = RayIntersection(CameraPosition, RayDirection, Origin, FarH);
+		//			float i3 = i2 - i1;
+		//
+		//			float LayerHeight = (length(CurrentLightPosition - CameraPosition) - i1) / i3;
+		//
+		//			float t = DensityAtPosition(CurrentLightPosition, LayerHeight);
+		//			Trans = saturate(Trans + t);
+		//
+		//
+		//			CurrentLightPosition = CurrentLightPosition * LightStepVector;
+		//			FullTrans = Trans > 0.99;
+		//		}
+		//	}
+		//}
+
 		CurrentWorldPosition += StepVector;
 	}
 
+	//float3 Color = CloudColor * (1 - Trans);
 	float3 Color = CloudColor;
 
 	return float4(Color, Density);

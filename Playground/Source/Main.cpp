@@ -48,7 +48,7 @@ const int FrameCount = 2;
 D3D12_VIEWPORT m_viewport;
 D3D12_RECT m_scissorRect;
 ComPtr<IDXGISwapChain3> m_swapChain;
-ComPtr<ID3D12Device> m_device;
+ComPtr<ID3D12Device4> m_device;
 ComPtr<ID3D12Resource> m_renderTargets[FrameCount];
 ComPtr<ID3D12CommandAllocator> m_commandAllocator;
 ComPtr<ID3D12CommandQueue> m_commandQueue;
@@ -376,8 +376,11 @@ void LoadAssets()
 		m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
 	}
 
+	m_device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&m_commandList));
+	m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
 
-	m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), m_pipelineState.Get(), IID_PPV_ARGS(&m_commandList));
+
+
 
 	{
 		Vertex triangleVertices[] =
