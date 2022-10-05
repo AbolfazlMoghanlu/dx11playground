@@ -25,6 +25,7 @@ Rotatorf LightDirection = Rotatorf(90.0f, 0.0f, 0.0f);
 
 Window* MainWindow;
 
+unsigned long long int FrameNumber = 0;
 
 struct Vertex
 {
@@ -57,7 +58,9 @@ ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
 ComPtr<ID3D12DescriptorHeap> m_ConstantHeap;
 ComPtr<ID3D12DescriptorHeap> m_ImGuiHeap;
 ComPtr<ID3D12PipelineState> m_pipelineState;
-ComPtr<ID3D12GraphicsCommandList> m_commandList;
+ComPtr<ID3D12PipelineState> m_ResolvePSO;
+ComPtr<ID3D12GraphicsCommandList1> m_commandList;
+ComPtr<ID3D12Resource> m_DownScaleTarget;
 UINT m_rtvDescriptorSize;
 ComPtr<ID3D12Resource> m_constantBuffer;
 UINT8* m_pCbvDataBegin;
@@ -111,7 +114,7 @@ struct PCloudBufferLayout
 	float LightStepSize = 100000.0f;
 
 	Vector3f LightDir;
-	float Useless3 = 0.0f;
+	int CBR = 0.0f;
 
 	float Padding[36];
 };
@@ -220,7 +223,7 @@ void LoadPipeline()
 
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-		rtvHeapDesc.NumDescriptors = 2;
+		rtvHeapDesc.NumDescriptors = 3;
 		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 		m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
@@ -238,6 +241,52 @@ void LoadPipeline()
 			m_device->CreateRenderTargetView(m_renderTargets[n].Get(), nullptr, rtvHandle);
 			rtvHandle.Offset(1, m_rtvDescriptorSize);
 		}
+
+		D3D12_HEAP_PROPERTIES DownProperites;
+		DownProperites.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		DownProperites.CreationNodeMask = 0;
+		DownProperites.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+		DownProperites.Type = D3D12_HEAP_TYPE_DEFAULT;
+		DownProperites.VisibleNodeMask = 0;
+
+		D3D12_RESOURCE_DESC DownSampleD = {};
+		DownSampleD.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+		DownSampleD.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+		DownSampleD.DepthOrArraySize = 1;
+		DownSampleD.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		D3D12_RESOURCE_FLAGS FLags = static_cast<D3D12_RESOURCE_FLAGS>
+			(D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+		DownSampleD.Flags = FLags;
+		DownSampleD.Width = WindowWidth / 2;
+		DownSampleD.Height = WindowHeight / 2;
+		DownSampleD.MipLevels = 1;
+		DownSampleD.SampleDesc.Count = 1;
+		DownSampleD.SampleDesc.Quality = 0;
+
+		const float C[] = {0.0f, 0.0f, 0.0f, 1.0f};
+
+		D3D12_DEPTH_STENCIL_VALUE DS;
+		DS.Depth = 0;
+		DS.Stencil = 0;
+
+		D3D12_CLEAR_VALUE CLR = {};
+		CLR.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		CLR.DepthStencil = DS;
+		CLR.Color[0] = 0;
+		CLR.Color[1] = 0;
+		CLR.Color[2] = 0;
+		CLR.Color[3] = 1;
+
+		m_device->CreateCommittedResource(&DownProperites, D3D12_HEAP_FLAG_NONE, &DownSampleD, D3D12_RESOURCE_STATE_GENERIC_READ
+			, &CLR, IID_PPV_ARGS(&m_DownScaleTarget));
+
+
+		D3D12_RENDER_TARGET_VIEW_DESC DownSampleDesc = {};
+		DownSampleDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		DownSampleDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+		DownSampleDesc.Texture2D.MipSlice = 0;
+		DownSampleDesc.Texture2D.PlaneSlice = 0;
+		m_device->CreateRenderTargetView(m_DownScaleTarget.Get(), &DownSampleDesc, rtvHandle);
 	}
 
 
@@ -253,7 +302,7 @@ void LoadPipeline()
 
 void LoadAssets()
 {
-	D3D12_DESCRIPTOR_RANGE ranges[5];
+	D3D12_DESCRIPTOR_RANGE ranges[6];
 	D3D12_ROOT_PARAMETER rootParameters[1];
 
 	ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
@@ -285,6 +334,13 @@ void LoadAssets()
 	ranges[4].BaseShaderRegister = 1;
 	ranges[4].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 	ranges[4].RegisterSpace = 0;
+
+	ranges[5].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	ranges[5].NumDescriptors = 1;
+	ranges[5].BaseShaderRegister = 3;
+	ranges[5].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	ranges[5].RegisterSpace = 0;
+
 
 	D3D12_ROOT_DESCRIPTOR_TABLE DescriptorTable;
 	DescriptorTable.NumDescriptorRanges = _countof(ranges);
@@ -328,11 +384,13 @@ void LoadAssets()
 	{
 		ComPtr<ID3DBlob> vertexShader;
 		ComPtr<ID3DBlob> pixelShader;
+		ComPtr<ID3DBlob> ResolvePixelShader;
 
 		UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 
 		D3DCompileFromFile(L"Source/Shader/VertexShader_vs.hlsl", nullptr, nullptr, "main", "vs_5_0", compileFlags, 0, &vertexShader, nullptr);
 		D3DCompileFromFile(L"Source/Shader/SkyPixelShader_ps.hlsl", nullptr, nullptr, "main", "ps_5_0", compileFlags, 0, &pixelShader, nullptr);
+		D3DCompileFromFile(L"Source/Shader/PixelShader_ps.hlsl", nullptr, nullptr, "main", "ps_5_0", compileFlags, 0, &ResolvePixelShader, nullptr);
 
 		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
 		{
@@ -364,7 +422,9 @@ void LoadAssets()
 		psoDesc.pRootSignature = m_rootSignature.Get();
 		psoDesc.VS = { reinterpret_cast<UINT8*>(vertexShader->GetBufferPointer()), vertexShader->GetBufferSize() };
 		psoDesc.PS = { reinterpret_cast<UINT8*>(pixelShader->GetBufferPointer()), pixelShader->GetBufferSize() };
-		psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+		D3D12_RASTERIZER_DESC RasterDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+		RasterDesc.MultisampleEnable = TRUE;
+		psoDesc.RasterizerState = RasterDesc;
 		psoDesc.BlendState = BlendDesc;
 		psoDesc.DepthStencilState.DepthEnable = FALSE;
 		psoDesc.DepthStencilState.StencilEnable = FALSE;
@@ -374,10 +434,15 @@ void LoadAssets()
 		psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 		psoDesc.SampleDesc.Count = 1;
 		m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
+
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC ResolvePSODesc = psoDesc;
+		ResolvePSODesc.PS = { reinterpret_cast<UINT8*>(ResolvePixelShader->GetBufferPointer()), ResolvePixelShader->GetBufferSize() };
+		m_device->CreateGraphicsPipelineState(&ResolvePSODesc, IID_PPV_ARGS(&m_ResolvePSO));
 	}
 
 	m_device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&m_commandList));
 	m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
+
 
 
 
@@ -666,6 +731,22 @@ void LoadAssets()
 
 	// -------------------------------------------------
 
+	D3D12_SHADER_RESOURCE_VIEW_DESC SRVDownSample = {};
+	SRVDownSample.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	SRVDownSample.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	SRVDownSample.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	SRVDownSample.Texture2D.MipLevels = 1;
+	SRVDownSample.Texture2D.MostDetailedMip = 0;
+	SRVDownSample.Texture2D.ResourceMinLODClamp = 0;
+	SRVDownSample.Texture2D.PlaneSlice = 0;
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE H6(m_ConstantHeap->GetCPUDescriptorHandleForHeapStart());
+	H6.Offset(5, S);
+
+	m_device->CreateShaderResourceView(m_DownScaleTarget.Get(), &SRVDownSample, H6);
+
+	//--------------------------------------------------
+
 	m_commandList->Close();
 
 	{
@@ -693,7 +774,32 @@ void PopulateCommandList()
 	m_commandAllocator->Reset();
 	m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
 
+	
+
+
+	D3D12_SAMPLE_POSITION SamplePosition[4];
+	SamplePosition[0].X = -8;
+	SamplePosition[0].Y = -8;
+	SamplePosition[1].X = -8;
+	SamplePosition[1].Y = -8;
+	SamplePosition[2].X = 7;
+	SamplePosition[2].Y = 7;
+	SamplePosition[3].X = 7;
+	SamplePosition[3].Y = 7;
+
+
+// 	if (CBR)
+// 	{
+// 		m_commandList->SetSamplePositions(1, 4, SamplePosition);
+// 	}
+// 	else
+// 	{
+// 		m_commandList->SetSamplePositions(0, 0, NULL);
+// 	}
+
+
 	m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+	SetViewportSize(WindowWidth / 2, WindowHeight / 2);
 	m_commandList->RSSetViewports(1, &m_viewport);
 	m_commandList->RSSetScissorRects(1, &m_scissorRect);
 
@@ -704,20 +810,44 @@ void PopulateCommandList()
 	auto barrier = CD3DX12_RESOURCE_BARRIER::Transition(m_renderTargets[m_frameIndex].Get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	m_commandList->ResourceBarrier(1, &barrier);
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+	auto barrier1 = CD3DX12_RESOURCE_BARRIER::Transition(m_DownScaleTarget.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	m_commandList->ResourceBarrier(1, &barrier1);
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), 2, m_rtvDescriptorSize);
 	m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 
-
 	// Record commands.
+	const float BlackColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	m_commandList->ClearRenderTargetView(rtvHandle, BlackColor, 0, nullptr);
+	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+	m_commandList->DrawInstanced(6, 1, 0, 0);
+
+
+	m_commandList->SetPipelineState(m_ResolvePSO.Get());
+	m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+	SetViewportSize(WindowWidth, WindowHeight);
+	m_commandList->RSSetViewports(1, &m_viewport);
+	m_commandList->RSSetScissorRects(1, &m_scissorRect);
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle1(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+	m_commandList->OMSetRenderTargets(1, &rtvHandle1, FALSE, nullptr);
+
+
+
+	auto barrier2 = CD3DX12_RESOURCE_BARRIER::Transition(m_DownScaleTarget.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+	m_commandList->ResourceBarrier(1, &barrier2);
+
+
 	const float clearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
-	m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+	m_commandList->ClearRenderTargetView(rtvHandle1, clearColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	m_commandList->DrawInstanced(6, 1, 0, 0);
 
 
 
-
+	// ---------------------------------------------------------------
 
 	ppHeaps[0] = m_ImGuiHeap.Get();
 	m_commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
@@ -793,6 +923,10 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
 	while (MainWindow->IsOpen())
 	{
+		FrameNumber++;
+
+
+
 		if (MainWindow->IsRightClickDown())
 		{
 			float CameraPitchOffset = MouseSpeed * -MainWindow->MouseDeltaY;
@@ -880,6 +1014,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderInt("LightSteps", &PsCloudBL.LightSteps, 1, 32);
 		ImGui::SliderFloat("LightStepSize", &PsCloudBL.LightStepSize, 1.0, 1000000.0, "%1f");
 		ImGui::SliderFloat3("LightDirection", &LightDirection.Pitch, 0.0, 360.0, "%1f");
+		ImGui::SliderInt("CBR", &PsCloudBL.CBR, 0, 3);
+
 
 		PsCloudBL.LightDir = LightDirection.Vector();
 		CameraPosition = CameraPosition + CameraForwardOffset + CameraRightOffset;

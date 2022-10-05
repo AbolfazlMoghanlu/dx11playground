@@ -27,7 +27,7 @@ cbuffer PCloudBufferLayout : register(b1)
 	float LightStepSize;
 
 	float3 LightDir;
-	float Useless3;
+	int CBR;
 
 	float Padding[36];
 };
@@ -90,9 +90,23 @@ float RayIntersection(float3 RayOrigin, float3 RayDir, float3 SphereOrigin, floa
 }
 
 
-float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 color : Color) : SV_Target
+float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 color : Color, float2 ScreenPos : SC) : SV_Target
 {
-float3 CameraToWorldPosition = WorldPosition.xyz - CameraPosition;
+	//float TX = 1 / 1080.0f;
+	//float TY = 1 / 720.0f;
+	//
+	//int Y = fmod((int)(ScreenPos.y / TY), 2);
+	//int X = fmod((int)(ScreenPos.x / TX), 2);
+	//
+	//int FX = fmod(CBR, 2);
+	//int FY = CBR > 1;
+	//
+	//if((X == FX && Y == FY))
+	//	discard;
+	
+	return CoverageTexture.Sample(CoverageTextureSampler, ScreenPos.xy);
+
+	float3 CameraToWorldPosition = WorldPosition.xyz - CameraPosition;
 	float3 CameraVector = normalize(CameraToWorldPosition);
 
 	// --------------------------------------------------------------
@@ -110,7 +124,7 @@ float3 CameraToWorldPosition = WorldPosition.xyz - CameraPosition;
 	float LayerHeight = t4 - t3;
 
 	if (length(NearIntersection - CameraPosition) > TracingStartMaxDistance)
-		return float4(0.0, 0, 0, 0);
+		discard;
 
 	float3 StepVector = CameraVector * LayerHeight / Steps;
 	float3 CurrentWorldPosition = NearIntersection;
