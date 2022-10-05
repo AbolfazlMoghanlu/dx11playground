@@ -104,7 +104,7 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 	//if((X == FX && Y == FY))
 	//	discard;
 	
-	return CoverageTexture.Sample(CoverageTextureSampler, ScreenPos.xy);
+	//return CoverageTexture.Sample(CoverageTextureSampler, ScreenPos.xy);
 
 	float3 CameraToWorldPosition = WorldPosition.xyz - CameraPosition;
 	float3 CameraVector = normalize(CameraToWorldPosition);

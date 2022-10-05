@@ -817,7 +817,7 @@ void PopulateCommandList()
 	m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 
 	// Record commands.
-	const float BlackColor[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+	const float BlackColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	m_commandList->ClearRenderTargetView(rtvHandle, BlackColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
