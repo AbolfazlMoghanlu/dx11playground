@@ -40,6 +40,15 @@ project "playground"
 		"dxguid.lib"
 	}
 	
+		postbuildcommands 
+	{
+		"{RMDIR} ../Bin/" .. outputdir .. "/Content/",
+		"{COPY} ../Content/ ../Bin/" .. outputdir .. "/Content/",
+
+		"{RMDIR} ../Bin/" .. outputdir .. "/playground/Source/Shader",
+		"{COPY} Source/Shader ../Bin/" .. outputdir .. "/playground/Source/Shader/"		
+	}
+	
 	libdirs
 	{
 		"ThirdParty/Library/**"
