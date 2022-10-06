@@ -34,6 +34,15 @@ cbuffer PCloudBufferLayout : register(b1)
 	float Padding[35];
 };
 
+cbuffer VSContantBufferLayout : register(b0)
+{
+	float4x4 TransformMatrix;
+	float4x4 ViewMatrix;
+	float4x4 ProjectionMatrix;
+	float4x4 PrevView;
+	float4x4 PrevProjection;
+};
+
 Texture2D<float4> DownSampledTexture : register(t3);
 Texture2D<float4> ReconTexture1 : register(t4);
 Texture2D<float4> ReconTexture2 : register(t5);
@@ -61,16 +70,35 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 
 	else
 	{
+		float2 ReprojectedUV;
+
+		float4 P = mul(PrevView, float4(WorldPosition.xyz, 1));
+		P = mul(PrevProjection, P);
+
+		ReprojectedUV = P.xy / P.w;
+
+		ReprojectedUV += 1;
+		ReprojectedUV /= 2;
+		ReprojectedUV = float2(ReprojectedUV.x, 1 - ReprojectedUV.y);
+
+		if(ReprojectedUV.x < 0 || ReprojectedUV.x > 1 || ReprojectedUV.y < 0 || ReprojectedUV.y > 1)
+			return float4(0, 0, 0, 0);
+
 		if (SwapIndex == 0)
 		{
-			Color = ReconTexture1.Sample(NearestSampler, UVs);
+			Color = ReconTexture1.Sample(NearestSampler, ReprojectedUV);
 		}
 
 		else
 		{
-			Color = ReconTexture2.Sample(NearestSampler, UVs);
+			Color = ReconTexture2.Sample(NearestSampler, ReprojectedUV);
 		}
 	}
+
+
+
+
+
 
 	return Color;
 }

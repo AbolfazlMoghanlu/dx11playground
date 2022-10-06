@@ -11,6 +11,8 @@ cbuffer VSContantBufferLayout : register(b0)
 	float4x4 TransformMatrix;
 	float4x4 ViewMatrix;
 	float4x4 ProjectionMatrix;
+	float4x4 PrevView;
+	float4x4 PrevProjection;
 };
 
 VSOut main( float3 inpos : POSITION , float3 incolor : Color )

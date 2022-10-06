@@ -35,12 +35,17 @@ struct Vertex
 	float U;
 };
 
+Matrix<float> PrevView;
+Matrix<float> PrevProjection;
+
 struct VSConstantBufferLayout
 {
 	Matrix<float> TransformMatrix;
 	Matrix<float> ViewMatrix;
 	Matrix<float> ProjectionMatrix;
-	float padding[16] = { 0 };
+	Matrix<float> PrevView;
+	Matrix<float> PrevProjection;
+	float padding[48] = { 0 };
 };
 
 
@@ -1056,7 +1061,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		Vector3f CameraForwardOffset = ForwardVector * MainWindow->GetUpValue() * CameraSpeed;
 		Vector3f CameraRightOffset = RightVector * MainWindow->GetRightValue() * CameraSpeed;
 
-		//CameraPosition = CameraPosition + CameraForwardOffset + CameraRightOffset;
 		std::cout << CameraPosition.ToString() << std::endl;
 
 		// ---------------------------------------------------------
@@ -1076,13 +1080,17 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 			Vector3f SkyScale = Vector3f(5.0f);
 
 			Matrix<float> TransformMatrix = ScaleRotationTranslationMatrix<float>(SkyScale, SkyRotation, SkyPosition);
-			VSConstantBuffer.TransformMatrix = TransformMatrix;
+			VSConstantBuffer.TransformMatrix = TransformMatrix; 
 
 			Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
 			VSConstantBuffer.ViewMatrix = CameraViewMatrix;
+			VSConstantBuffer.PrevView = PrevView;
+			PrevView = CameraViewMatrix;
 
 			Matrix<float> ProjectionMatrix = PerspectiveMatrix<float>(90.0f, (float)WindowWidth / (float)WindowHeight, 0.1f, 100.0f);
 			VSConstantBuffer.ProjectionMatrix = ProjectionMatrix;
+			VSConstantBuffer.PrevProjection = PrevProjection;
+			PrevProjection = ProjectionMatrix;
 
 			// ---------------------------------------------------------
 
