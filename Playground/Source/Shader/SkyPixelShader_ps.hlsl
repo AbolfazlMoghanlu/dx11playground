@@ -92,21 +92,24 @@ float RayIntersection(float3 RayOrigin, float3 RayDir, float3 SphereOrigin, floa
 
 float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 color : Color, float2 ScreenPos : SC) : SV_Target
 {
-	//float TX = 1 / 1080.0f;
-	//float TY = 1 / 720.0f;
-	//
-	//int Y = fmod((int)(ScreenPos.y / TY), 2);
-	//int X = fmod((int)(ScreenPos.x / TX), 2);
-	//
-	//int FX = fmod(CBR, 2);
-	//int FY = CBR > 1;
-	//
-	//if((X == FX && Y == FY))
-	//	discard;
-	
-	//return CoverageTexture.Sample(CoverageTextureSampler, ScreenPos.xy);
+	float TX = 1 / 1080.0f;
+	float TY = 1 / 720.0f;
+		
+	int FX = fmod(CBR, 4);
+	int FY = CBR / 4;
 
-	float3 CameraToWorldPosition = WorldPosition.xyz - CameraPosition;
+	float2 UU = ScreenPos.xy;
+	float2 Dis = float2(FX, FY);
+
+	UU += float2(TX, TY) * Dis;
+
+	//return CoverageTexture.Sample(CoverageTextureSampler, UU);
+
+	// ---------------------------------------------------------------
+
+	float3 OffsetedWorldPosition = WorldPosition;
+	OffsetedWorldPosition.xy += float2(TX, TY) * Dis;
+	float3 CameraToWorldPosition = OffsetedWorldPosition - CameraPosition;
 	float3 CameraVector = normalize(CameraToWorldPosition);
 
 	// --------------------------------------------------------------
@@ -124,7 +127,8 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 	float LayerHeight = t4 - t3;
 
 	if (length(NearIntersection - CameraPosition) > TracingStartMaxDistance)
-		discard;
+		return float4(0, 0, 0, 1);
+		//discard;
 
 	float3 StepVector = CameraVector * LayerHeight / Steps;
 	float3 CurrentWorldPosition = NearIntersection;
@@ -180,5 +184,5 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 	//float3 Color = CloudColor * (1 - Trans);
 	float3 Color = CloudColor;
 
-	return float4(Color, Density);
+	return float4(Color * Density, 1.0f);
 }

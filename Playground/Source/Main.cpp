@@ -26,6 +26,7 @@ Rotatorf LightDirection = Rotatorf(90.0f, 0.0f, 0.0f);
 Window* MainWindow;
 
 unsigned long long int FrameNumber = 0;
+int DownSampleScale = 4;
 
 struct Vertex
 {
@@ -41,6 +42,9 @@ struct VSConstantBufferLayout
 	Matrix<float> ProjectionMatrix;
 	float padding[16] = { 0 };
 };
+
+
+const float C[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 VSConstantBufferLayout VSConstantBuffer;
 
@@ -257,13 +261,11 @@ void LoadPipeline()
 		D3D12_RESOURCE_FLAGS FLags = static_cast<D3D12_RESOURCE_FLAGS>
 			(D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
 		DownSampleD.Flags = FLags;
-		DownSampleD.Width = WindowWidth / 2;
-		DownSampleD.Height = WindowHeight / 2;
+		DownSampleD.Width = WindowWidth / DownSampleScale;
+		DownSampleD.Height = WindowHeight / DownSampleScale;
 		DownSampleD.MipLevels = 1;
 		DownSampleD.SampleDesc.Count = 1;
 		DownSampleD.SampleDesc.Quality = 0;
-
-		const float C[] = {0.0f, 0.0f, 0.0f, 1.0f};
 
 		D3D12_DEPTH_STENCIL_VALUE DS;
 		DS.Depth = 0;
@@ -275,7 +277,7 @@ void LoadPipeline()
 		CLR.Color[0] = 0;
 		CLR.Color[1] = 0;
 		CLR.Color[2] = 0;
-		CLR.Color[3] = 1;
+		CLR.Color[3] = 0;
 
 		m_device->CreateCommittedResource(&DownProperites, D3D12_HEAP_FLAG_NONE, &DownSampleD, D3D12_RESOURCE_STATE_GENERIC_READ
 			, &CLR, IID_PPV_ARGS(&m_DownScaleTarget));
@@ -365,7 +367,22 @@ void LoadAssets()
 	StaticSamplerDesc.ShaderRegister = 0;
 	StaticSamplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-	D3D12_STATIC_SAMPLER_DESC StaticSamplers[] = { StaticSamplerDesc };
+	D3D12_STATIC_SAMPLER_DESC NearestSamplerDesc = {};
+	NearestSamplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	NearestSamplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	NearestSamplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	NearestSamplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	NearestSamplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+	NearestSamplerDesc.MaxAnisotropy = 16;
+	NearestSamplerDesc.MaxLOD = 1;
+	NearestSamplerDesc.MinLOD = 0;
+	NearestSamplerDesc.MipLODBias = 0;
+	NearestSamplerDesc.RegisterSpace = 0;
+	NearestSamplerDesc.Filter = D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
+	NearestSamplerDesc.ShaderRegister = 1;
+	NearestSamplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+	D3D12_STATIC_SAMPLER_DESC StaticSamplers[] = { StaticSamplerDesc , NearestSamplerDesc};
 
 	{
 		CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
@@ -423,7 +440,7 @@ void LoadAssets()
 		psoDesc.VS = { reinterpret_cast<UINT8*>(vertexShader->GetBufferPointer()), vertexShader->GetBufferSize() };
 		psoDesc.PS = { reinterpret_cast<UINT8*>(pixelShader->GetBufferPointer()), pixelShader->GetBufferSize() };
 		D3D12_RASTERIZER_DESC RasterDesc = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-		RasterDesc.MultisampleEnable = TRUE;
+		RasterDesc.MultisampleEnable = FALSE;
 		psoDesc.RasterizerState = RasterDesc;
 		psoDesc.BlendState = BlendDesc;
 		psoDesc.DepthStencilState.DepthEnable = FALSE;
@@ -778,28 +795,33 @@ void PopulateCommandList()
 
 
 	D3D12_SAMPLE_POSITION SamplePosition[4];
-	SamplePosition[0].X = -8;
-	SamplePosition[0].Y = -8;
-	SamplePosition[1].X = -8;
-	SamplePosition[1].Y = -8;
-	SamplePosition[2].X = 7;
-	SamplePosition[2].Y = 7;
-	SamplePosition[3].X = 7;
-	SamplePosition[3].Y = 7;
+	SamplePosition[0].X = -4;
+	SamplePosition[0].Y = -4;
+	//SamplePosition[1].X = 4;
+	//SamplePosition[1].Y = -4;
+	//SamplePosition[2].X = -4;
+	//SamplePosition[2].Y = 4;
+	//SamplePosition[3].X = 4;
+	//SamplePosition[3].Y = 4;
 
+	D3D12_SAMPLE_POSITION SamplePosition1[4];
+	SamplePosition1[0].X = 0;
+	SamplePosition1[0].Y = 0;
 
-// 	if (CBR)
-// 	{
-// 		m_commandList->SetSamplePositions(1, 4, SamplePosition);
-// 	}
-// 	else
-// 	{
-// 		m_commandList->SetSamplePositions(0, 0, NULL);
-// 	}
+	//if (PsCloudBL.CBR == 0)
+	//{
+	//	m_commandList->SetSamplePositions(1, 1, SamplePosition);
+	//
+	//}
+	//else
+	//{
+	//	m_commandList->SetSamplePositions(1, 1, SamplePosition1);
+	//}
+ 	
 
 
 	m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
-	SetViewportSize(WindowWidth / 2, WindowHeight / 2);
+	SetViewportSize(WindowWidth / DownSampleScale, WindowHeight / DownSampleScale);
 	m_commandList->RSSetViewports(1, &m_viewport);
 	m_commandList->RSSetScissorRects(1, &m_scissorRect);
 
@@ -816,9 +838,8 @@ void PopulateCommandList()
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), 2, m_rtvDescriptorSize);
 	m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
 
-	// Record commands.
-	const float BlackColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	m_commandList->ClearRenderTargetView(rtvHandle, BlackColor, 0, nullptr);
+
+	m_commandList->ClearRenderTargetView(rtvHandle, C, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	m_commandList->DrawInstanced(6, 1, 0, 0);
@@ -840,9 +861,10 @@ void PopulateCommandList()
 
 
 	const float clearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
-	m_commandList->ClearRenderTargetView(rtvHandle1, clearColor, 0, nullptr);
+	//m_commandList->ClearRenderTargetView(rtvHandle1, clearColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+	m_commandList->SetSamplePositions(0, 0, NULL);
 	m_commandList->DrawInstanced(6, 1, 0, 0);
 
 
@@ -872,7 +894,7 @@ void OnRender()
 	ID3D12CommandList* ppCommandLists[] = { m_commandList.Get() };
 	m_commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 
-	m_swapChain->Present(0, 0);
+	m_swapChain->Present(1, 0);
 
 	WaitForPreviousFrame();
 }
@@ -924,6 +946,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	while (MainWindow->IsOpen())
 	{
 		FrameNumber++;
+		PsCloudBL.CBR = Math::Mod(FrameNumber, 16);
 
 
 
@@ -1014,7 +1037,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		ImGui::SliderInt("LightSteps", &PsCloudBL.LightSteps, 1, 32);
 		ImGui::SliderFloat("LightStepSize", &PsCloudBL.LightStepSize, 1.0, 1000000.0, "%1f");
 		ImGui::SliderFloat3("LightDirection", &LightDirection.Pitch, 0.0, 360.0, "%1f");
-		ImGui::SliderInt("CBR", &PsCloudBL.CBR, 0, 3);
+		ImGui::SliderInt("CBR", &PsCloudBL.CBR, 0, 15);
 
 
 		PsCloudBL.LightDir = LightDirection.Vector();
