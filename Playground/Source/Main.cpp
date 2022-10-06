@@ -63,8 +63,10 @@ ComPtr<ID3D12DescriptorHeap> m_ConstantHeap;
 ComPtr<ID3D12DescriptorHeap> m_ImGuiHeap;
 ComPtr<ID3D12PipelineState> m_pipelineState;
 ComPtr<ID3D12PipelineState> m_ResolvePSO;
+ComPtr<ID3D12PipelineState> m_ScreenPSO;
 ComPtr<ID3D12GraphicsCommandList1> m_commandList;
 ComPtr<ID3D12Resource> m_DownScaleTarget;
+ComPtr<ID3D12Resource> m_ReconstructTarget;
 UINT m_rtvDescriptorSize;
 ComPtr<ID3D12Resource> m_constantBuffer;
 UINT8* m_pCbvDataBegin;
@@ -169,8 +171,6 @@ void LoadPipeline()
 	CreateDXGIFactory1(IID_PPV_ARGS(&factory));
 
 	ComPtr<IDXGIAdapter> Adapter;
-	//	factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter));
-
 
 	SIZE_T maxDedicatedVideoMemory = 0;
 	UINT Index = 0;
@@ -227,7 +227,7 @@ void LoadPipeline()
 
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-		rtvHeapDesc.NumDescriptors = 3;
+		rtvHeapDesc.NumDescriptors = 4;
 		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 		m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
@@ -289,6 +289,19 @@ void LoadPipeline()
 		DownSampleDesc.Texture2D.MipSlice = 0;
 		DownSampleDesc.Texture2D.PlaneSlice = 0;
 		m_device->CreateRenderTargetView(m_DownScaleTarget.Get(), &DownSampleDesc, rtvHandle);
+
+		// ---------------------------------------------------
+
+		rtvHandle.Offset(1, m_rtvDescriptorSize);
+
+		D3D12_RESOURCE_DESC ReconstructionD = DownSampleD;
+		ReconstructionD.Width = WindowWidth;
+		ReconstructionD.Height = WindowHeight;
+
+		m_device->CreateCommittedResource(&DownProperites, D3D12_HEAP_FLAG_NONE, &ReconstructionD, D3D12_RESOURCE_STATE_GENERIC_READ
+			, &CLR, IID_PPV_ARGS(&m_ReconstructTarget));
+
+		m_device->CreateRenderTargetView(m_ReconstructTarget.Get(), &DownSampleDesc, rtvHandle);
 	}
 
 
@@ -304,7 +317,7 @@ void LoadPipeline()
 
 void LoadAssets()
 {
-	D3D12_DESCRIPTOR_RANGE ranges[6];
+	D3D12_DESCRIPTOR_RANGE ranges[7];
 	D3D12_ROOT_PARAMETER rootParameters[1];
 
 	ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
@@ -342,6 +355,12 @@ void LoadAssets()
 	ranges[5].BaseShaderRegister = 3;
 	ranges[5].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 	ranges[5].RegisterSpace = 0;
+
+	ranges[6].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	ranges[6].NumDescriptors = 1;
+	ranges[6].BaseShaderRegister = 4;
+	ranges[6].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	ranges[6].RegisterSpace = 0;
 
 
 	D3D12_ROOT_DESCRIPTOR_TABLE DescriptorTable;
@@ -402,12 +421,15 @@ void LoadAssets()
 		ComPtr<ID3DBlob> vertexShader;
 		ComPtr<ID3DBlob> pixelShader;
 		ComPtr<ID3DBlob> ResolvePixelShader;
+		ComPtr<ID3DBlob> ScreenPixelShader;
+
 
 		UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 
 		D3DCompileFromFile(L"Source/Shader/VertexShader_vs.hlsl", nullptr, nullptr, "main", "vs_5_0", compileFlags, 0, &vertexShader, nullptr);
 		D3DCompileFromFile(L"Source/Shader/SkyPixelShader_ps.hlsl", nullptr, nullptr, "main", "ps_5_0", compileFlags, 0, &pixelShader, nullptr);
 		D3DCompileFromFile(L"Source/Shader/PixelShader_ps.hlsl", nullptr, nullptr, "main", "ps_5_0", compileFlags, 0, &ResolvePixelShader, nullptr);
+		D3DCompileFromFile(L"Source/Shader/PixelShaderScreen_ps.hlsl", nullptr, nullptr, "main", "ps_5_0", compileFlags, 0, &ScreenPixelShader, nullptr);
 
 		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
 		{
@@ -455,6 +477,10 @@ void LoadAssets()
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC ResolvePSODesc = psoDesc;
 		ResolvePSODesc.PS = { reinterpret_cast<UINT8*>(ResolvePixelShader->GetBufferPointer()), ResolvePixelShader->GetBufferSize() };
 		m_device->CreateGraphicsPipelineState(&ResolvePSODesc, IID_PPV_ARGS(&m_ResolvePSO));
+
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC ScreenPSODesc = psoDesc;
+		ScreenPSODesc.PS = { reinterpret_cast<UINT8*>(ScreenPixelShader->GetBufferPointer()), ScreenPixelShader->GetBufferSize() };
+		m_device->CreateGraphicsPipelineState(&ScreenPSODesc, IID_PPV_ARGS(&m_ScreenPSO));
 	}
 
 	m_device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&m_commandList));
@@ -763,6 +789,12 @@ void LoadAssets()
 	m_device->CreateShaderResourceView(m_DownScaleTarget.Get(), &SRVDownSample, H6);
 
 	//--------------------------------------------------
+	CD3DX12_CPU_DESCRIPTOR_HANDLE H7(m_ConstantHeap->GetCPUDescriptorHandleForHeapStart());
+	H7.Offset(6, S);
+
+	m_device->CreateShaderResourceView(m_ReconstructTarget.Get(), &SRVDownSample, H7);
+
+	// -------------------------------------------------
 
 	m_commandList->Close();
 
@@ -792,31 +824,6 @@ void PopulateCommandList()
 	m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
 
 	
-
-
-	D3D12_SAMPLE_POSITION SamplePosition[4];
-	SamplePosition[0].X = -4;
-	SamplePosition[0].Y = -4;
-	//SamplePosition[1].X = 4;
-	//SamplePosition[1].Y = -4;
-	//SamplePosition[2].X = -4;
-	//SamplePosition[2].Y = 4;
-	//SamplePosition[3].X = 4;
-	//SamplePosition[3].Y = 4;
-
-	D3D12_SAMPLE_POSITION SamplePosition1[4];
-	SamplePosition1[0].X = 0;
-	SamplePosition1[0].Y = 0;
-
-	//if (PsCloudBL.CBR == 0)
-	//{
-	//	m_commandList->SetSamplePositions(1, 1, SamplePosition);
-	//
-	//}
-	//else
-	//{
-	//	m_commandList->SetSamplePositions(1, 1, SamplePosition1);
-	//}
  	
 
 
@@ -845,13 +852,21 @@ void PopulateCommandList()
 	m_commandList->DrawInstanced(6, 1, 0, 0);
 
 
+
+
+
+
+
 	m_commandList->SetPipelineState(m_ResolvePSO.Get());
 	m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
 	SetViewportSize(WindowWidth, WindowHeight);
 	m_commandList->RSSetViewports(1, &m_viewport);
 	m_commandList->RSSetScissorRects(1, &m_scissorRect);
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle1(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+	//CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle1(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+	//m_commandList->OMSetRenderTargets(1, &rtvHandle1, FALSE, nullptr);
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle1(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), 3, m_rtvDescriptorSize);
 	m_commandList->OMSetRenderTargets(1, &rtvHandle1, FALSE, nullptr);
 
 
@@ -859,8 +874,11 @@ void PopulateCommandList()
 	auto barrier2 = CD3DX12_RESOURCE_BARRIER::Transition(m_DownScaleTarget.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
 	m_commandList->ResourceBarrier(1, &barrier2);
 
+	auto barrier3 = CD3DX12_RESOURCE_BARRIER::Transition(m_ReconstructTarget.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+	m_commandList->ResourceBarrier(1, &barrier3);
 
-	const float clearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
+
+	//const float clearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
 	//m_commandList->ClearRenderTargetView(rtvHandle1, clearColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
@@ -868,6 +886,27 @@ void PopulateCommandList()
 	m_commandList->DrawInstanced(6, 1, 0, 0);
 
 
+	auto barrier4 = CD3DX12_RESOURCE_BARRIER::Transition(m_ReconstructTarget.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+	m_commandList->ResourceBarrier(1, &barrier4);
+
+
+
+	m_commandList->SetPipelineState(m_ScreenPSO.Get());
+	m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+	SetViewportSize(WindowWidth, WindowHeight);
+	m_commandList->RSSetViewports(1, &m_viewport);
+	m_commandList->RSSetScissorRects(1, &m_scissorRect);
+
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle2(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
+	m_commandList->OMSetRenderTargets(1, &rtvHandle2, FALSE, nullptr);
+
+	const float clearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
+	m_commandList->ClearRenderTargetView(rtvHandle2, clearColor, 0, nullptr);
+	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+	m_commandList->SetSamplePositions(0, 0, NULL);
+	m_commandList->DrawInstanced(6, 1, 0, 0);
 
 	// ---------------------------------------------------------------
 
