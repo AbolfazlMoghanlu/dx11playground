@@ -49,6 +49,21 @@ Texture2D<float4> ReconTexture2 : register(t5);
 SamplerState TextureSampler: register(s0);
 SamplerState NearestSampler: register(s1);
 
+
+
+float RayIntersection(float3 RayOrigin, float3 RayDir, float3 SphereOrigin, float SphereRadius)
+{
+	float3 RayOriginToSphereOrigin = SphereOrigin - RayOrigin;
+	float a = dot(RayDir, RayOriginToSphereOrigin);
+	float3 b = RayOrigin + RayDir * a;
+	float c = length(SphereOrigin - b);
+
+	float d = sqrt(SphereRadius * SphereRadius - c * c);
+	return d + a;
+}
+
+
+
 float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 color : Color,
 	float2 ScreenPos : SC) : SV_TARGET
 {
@@ -71,8 +86,18 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 	else
 	{
 		float2 ReprojectedUV;
+		float3 CameraVector = normalize(WorldPosition - CameraPosition);
 
-		float4 P = mul(PrevView, float4(WorldPosition.xyz, 1));
+
+		float PlanetRadius = 6360000.0f;
+		float3 Origin = float3(0, StartZ - PlanetRadius, 0);
+
+		float t3 = RayIntersection(CameraPosition, CameraVector, Origin, PlanetRadius);
+		float3 NearIntersection = CameraPosition + CameraVector * t3 * 1;
+
+
+
+		float4 P = mul(PrevView, float4(NearIntersection, 1));
 		P = mul(PrevProjection, P);
 
 		ReprojectedUV = P.xy / P.w;
@@ -80,6 +105,8 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 		ReprojectedUV += 1;
 		ReprojectedUV /= 2;
 		ReprojectedUV = float2(ReprojectedUV.x, 1 - ReprojectedUV.y);
+
+		//return float4(ReprojectedUV, 0, 1);
 
 		if(ReprojectedUV.x < 0 || ReprojectedUV.x > 1 || ReprojectedUV.y < 0 || ReprojectedUV.y > 1)
 			return float4(0, 0, 0, 0);

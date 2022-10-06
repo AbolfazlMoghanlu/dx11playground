@@ -19,7 +19,7 @@ const int WindowHeight = 720;
 Rotatorf CameraRotation = Rotatorf(0.0f);
 Vector3f CameraPosition = Vector3f(0.0f);
 const float MouseSpeed = 500.0f;
-const float CameraSpeed = 10.0f;
+const float CameraSpeed = 200.0f;
 
 Rotatorf LightDirection = Rotatorf(90.0f, 0.0f, 0.0f);
 
@@ -1075,14 +1075,16 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		{
 			Vector3f CameraForwardVector = CameraRotation.Vector();
 
+			std::cout << "Forward : " << CameraForwardVector.ToString() << std::endl;
+
 			Vector3f SkyPosition = CameraPosition + CameraForwardVector * 1.0f;
 			Rotatorf SkyRotation = CameraRotation;
 			Vector3f SkyScale = Vector3f(5.0f);
 
 			Matrix<float> TransformMatrix = ScaleRotationTranslationMatrix<float>(SkyScale, SkyRotation, SkyPosition);
-			VSConstantBuffer.TransformMatrix = TransformMatrix; 
+			VSConstantBuffer.TransformMatrix = TransformMatrix;
 
-			Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, CameraForwardVector, Vector3f::UpVector);
+			Matrix<float> CameraViewMatrix = Math::LookAt(CameraPosition, ForwardVector, Vector3f::UpVector);
 			VSConstantBuffer.ViewMatrix = CameraViewMatrix;
 			VSConstantBuffer.PrevView = PrevView;
 			PrevView = CameraViewMatrix;
@@ -1136,6 +1138,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 		PsCloudBL.LightDir = LightDirection.Vector();
 		CameraPosition = CameraPosition + CameraForwardOffset + CameraRightOffset;
 		PsCloudBL.CameraPosition = CameraPosition;
+
+
 
 
 		ImGui::End();

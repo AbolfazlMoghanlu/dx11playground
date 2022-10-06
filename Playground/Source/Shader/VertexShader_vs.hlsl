@@ -28,7 +28,7 @@ VSOut main( float3 inpos : POSITION , float3 incolor : Color )
 	Out.pos = mul(ViewMatrix, Out.pos);
 	Out.pos = mul(ProjectionMatrix, Out.pos);
 
-	Out.ScreenPos = (Out.pos.xy + 1) / 2;
+	Out.ScreenPos = (Out.pos.xy / Out.pos.w + 1) / 2;
 
 	return Out;
 }
