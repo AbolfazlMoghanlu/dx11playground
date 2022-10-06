@@ -29,10 +29,14 @@ cbuffer PCloudBufferLayout : register(b1)
 	float3 LightDir;
 	int CBR;
 
-	float Padding[36];
+	int SwapIndex;
+
+	float Padding[35];
 };
 
 Texture2D<float4> DownSampledTexture : register(t3);
+Texture2D<float4> ReconTexture1 : register(t4);
+Texture2D<float4> ReconTexture2 : register(t5);
 SamplerState TextureSampler: register(s0);
 SamplerState NearestSampler: register(s1);
 
@@ -46,13 +50,27 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 	int TX = fmod(CBR, 4);
 	int TY = CBR / 4;
 
-	if(!(TX == T1 && TY == T2))
-		//return float4(1, 0, 0, 0);
-		discard;
 
 	float2 UVs = float2(ScreenPos.x, 1 - ScreenPos.y);
+	float4 Color;
 
-	float4 Color = DownSampledTexture.Sample(NearestSampler, UVs);
-	//return float4(CloudColor, Color.w);
+	if(TX == T1 && TY == T2)
+	{
+		Color = DownSampledTexture.Sample(NearestSampler, UVs);
+	}
+
+	else
+	{
+		if (SwapIndex == 0)
+		{
+			Color = ReconTexture1.Sample(NearestSampler, UVs);
+		}
+
+		else
+		{
+			Color = ReconTexture2.Sample(NearestSampler, UVs);
+		}
+	}
+
 	return Color;
 }

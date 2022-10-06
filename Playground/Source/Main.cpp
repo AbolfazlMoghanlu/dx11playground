@@ -75,6 +75,7 @@ ComPtr<ID3D12PipelineState> m_ScreenPSO;
 ComPtr<ID3D12GraphicsCommandList1> m_commandList;
 ComPtr<ID3D12Resource> m_DownScaleTarget;
 ComPtr<ID3D12Resource> m_ReconstructTarget;
+ComPtr<ID3D12Resource> m_ReconstructTarget1;
 UINT m_rtvDescriptorSize;
 ComPtr<ID3D12Resource> m_constantBuffer;
 UINT8* m_pCbvDataBegin;
@@ -130,7 +131,9 @@ struct PCloudBufferLayout
 	Vector3f LightDir;
 	int CBR = 0.0f;
 
-	float Padding[36];
+	int SwapIndex = 0;
+
+	float Padding[35];
 };
 
 PCloudBufferLayout PsCloudBL;
@@ -235,7 +238,7 @@ void LoadPipeline()
 
 	{
 		D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-		rtvHeapDesc.NumDescriptors = 4;
+		rtvHeapDesc.NumDescriptors = 5;
 		rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 		rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 		m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
@@ -310,6 +313,19 @@ void LoadPipeline()
 			, &CLR, IID_PPV_ARGS(&m_ReconstructTarget));
 
 		m_device->CreateRenderTargetView(m_ReconstructTarget.Get(), &DownSampleDesc, rtvHandle);
+
+		// ----------------------------------------------------
+
+		rtvHandle.Offset(1, m_rtvDescriptorSize);
+
+		D3D12_RESOURCE_DESC ReconstructionD1 = DownSampleD;
+		ReconstructionD1.Width = WindowWidth;
+		ReconstructionD1.Height = WindowHeight;
+
+		m_device->CreateCommittedResource(&DownProperites, D3D12_HEAP_FLAG_NONE, &ReconstructionD1, D3D12_RESOURCE_STATE_GENERIC_READ
+			, &CLR, IID_PPV_ARGS(&m_ReconstructTarget1));
+
+		m_device->CreateRenderTargetView(m_ReconstructTarget1.Get(), &DownSampleDesc, rtvHandle);
 	}
 
 
@@ -325,7 +341,7 @@ void LoadPipeline()
 
 void LoadAssets()
 {
-	D3D12_DESCRIPTOR_RANGE ranges[7];
+	D3D12_DESCRIPTOR_RANGE ranges[8];
 	D3D12_ROOT_PARAMETER rootParameters[1];
 
 	ranges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
@@ -370,6 +386,11 @@ void LoadAssets()
 	ranges[6].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 	ranges[6].RegisterSpace = 0;
 
+	ranges[7].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	ranges[7].NumDescriptors = 1;
+	ranges[7].BaseShaderRegister = 5;
+	ranges[7].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	ranges[7].RegisterSpace = 0;
 
 	D3D12_ROOT_DESCRIPTOR_TABLE DescriptorTable;
 	DescriptorTable.NumDescriptorRanges = _countof(ranges);
@@ -803,6 +824,12 @@ void LoadAssets()
 
 	m_device->CreateShaderResourceView(m_ReconstructTarget.Get(), &SRVDownSample, H7);
 
+
+	CD3DX12_CPU_DESCRIPTOR_HANDLE H8(m_ConstantHeap->GetCPUDescriptorHandleForHeapStart());
+	H8.Offset(7, S);
+
+	m_device->CreateShaderResourceView(m_ReconstructTarget1.Get(), &SRVDownSample, H8);
+
 	// -------------------------------------------------
 
 	m_commandList->Close();
@@ -829,11 +856,12 @@ void LoadAssets()
 
 void PopulateCommandList()
 {
+	int SwapInd = Math::Mod(FrameNumber, 2);
+	PsCloudBL.SwapIndex = SwapInd;
+
 	m_commandAllocator->Reset();
 	m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
 
-	
- 	
 
 
 	m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
@@ -862,20 +890,14 @@ void PopulateCommandList()
 
 
 
-
-
-
-
 	m_commandList->SetPipelineState(m_ResolvePSO.Get());
 	m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
 	SetViewportSize(WindowWidth, WindowHeight);
 	m_commandList->RSSetViewports(1, &m_viewport);
 	m_commandList->RSSetScissorRects(1, &m_scissorRect);
 
-	//CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle1(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), m_frameIndex, m_rtvDescriptorSize);
-	//m_commandList->OMSetRenderTargets(1, &rtvHandle1, FALSE, nullptr);
 
-	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle1(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), 3, m_rtvDescriptorSize);
+	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle1(m_rtvHeap->GetCPUDescriptorHandleForHeapStart(), 3 + SwapInd, m_rtvDescriptorSize);
 	m_commandList->OMSetRenderTargets(1, &rtvHandle1, FALSE, nullptr);
 
 
@@ -883,19 +905,34 @@ void PopulateCommandList()
 	auto barrier2 = CD3DX12_RESOURCE_BARRIER::Transition(m_DownScaleTarget.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
 	m_commandList->ResourceBarrier(1, &barrier2);
 
-	auto barrier3 = CD3DX12_RESOURCE_BARRIER::Transition(m_ReconstructTarget.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
-	m_commandList->ResourceBarrier(1, &barrier3);
+	if (SwapInd == 0)
+	{
+		auto barrier3 = CD3DX12_RESOURCE_BARRIER::Transition(m_ReconstructTarget.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		m_commandList->ResourceBarrier(1, &barrier3);
+	}
+	else
+	{
+		auto barrier3 = CD3DX12_RESOURCE_BARRIER::Transition(m_ReconstructTarget1.Get(), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_RENDER_TARGET);
+		m_commandList->ResourceBarrier(1, &barrier3);
+	}
 
-
+	m_commandList->ClearRenderTargetView(rtvHandle1, C, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	m_commandList->SetSamplePositions(0, 0, NULL);
 	m_commandList->DrawInstanced(6, 1, 0, 0);
 
 
-	auto barrier4 = CD3DX12_RESOURCE_BARRIER::Transition(m_ReconstructTarget.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
-	m_commandList->ResourceBarrier(1, &barrier4);
-
+	if (SwapInd == 0)
+	{
+		auto barrier4 = CD3DX12_RESOURCE_BARRIER::Transition(m_ReconstructTarget.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+		m_commandList->ResourceBarrier(1, &barrier4);	
+	}
+	else
+	{
+		auto barrier4 = CD3DX12_RESOURCE_BARRIER::Transition(m_ReconstructTarget1.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_GENERIC_READ);
+		m_commandList->ResourceBarrier(1, &barrier4);
+	}
 
 
 	m_commandList->SetPipelineState(m_ScreenPSO.Get());
@@ -914,6 +951,7 @@ void PopulateCommandList()
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	m_commandList->SetSamplePositions(0, 0, NULL);
 	m_commandList->DrawInstanced(6, 1, 0, 0);
+
 
 	// ---------------------------------------------------------------
 
