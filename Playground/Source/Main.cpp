@@ -46,6 +46,14 @@ struct VSConstantBufferLayout
 
 const float C[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
+int ScreenJitter[16] = 
+{
+	0, 8, 2, 10,
+	12, 4, 14, 6,
+	3, 11, 1, 9,
+	15, 7, 13, 5
+};
+
 VSConstantBufferLayout VSConstantBuffer;
 
 const int FrameCount = 2;
@@ -984,7 +992,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	while (MainWindow->IsOpen())
 	{
 		FrameNumber++;
-		PsCloudBL.CBR = Math::Mod(FrameNumber, 16);
+		int Ind = Math::Mod(FrameNumber, 16);
+		PsCloudBL.CBR = ScreenJitter[Ind];
 
 
 
