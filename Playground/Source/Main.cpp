@@ -439,7 +439,7 @@ void LoadAssets()
 		};
 
 		D3D12_RENDER_TARGET_BLEND_DESC TargetBlendDesc;
-		TargetBlendDesc.BlendEnable = true;
+		TargetBlendDesc.BlendEnable = false; ////////////////////////////////
 		TargetBlendDesc.SrcBlend = D3D12_BLEND_SRC_ALPHA;
 		TargetBlendDesc.DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
 		TargetBlendDesc.BlendOp = D3D12_BLEND_OP_ADD;
@@ -480,6 +480,7 @@ void LoadAssets()
 
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC ScreenPSODesc = psoDesc;
 		ScreenPSODesc.PS = { reinterpret_cast<UINT8*>(ScreenPixelShader->GetBufferPointer()), ScreenPixelShader->GetBufferSize() };
+		ScreenPSODesc.BlendState.RenderTarget[0].BlendEnable = true;
 		m_device->CreateGraphicsPipelineState(&ScreenPSODesc, IID_PPV_ARGS(&m_ScreenPSO));
 	}
 
@@ -878,8 +879,6 @@ void PopulateCommandList()
 	m_commandList->ResourceBarrier(1, &barrier3);
 
 
-	//const float clearColor[] = { 0.47f, 0.78f, 0.89f, 1.0f };
-	//m_commandList->ClearRenderTargetView(rtvHandle1, clearColor, 0, nullptr);
 	m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	m_commandList->SetSamplePositions(0, 0, NULL);

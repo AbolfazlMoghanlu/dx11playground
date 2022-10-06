@@ -127,8 +127,7 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 	float LayerHeight = t4 - t3;
 
 	if (length(NearIntersection - CameraPosition) > TracingStartMaxDistance)
-		return float4(0, 0, 0, 1);
-		//discard;
+		discard;
 
 	float3 StepVector = CameraVector * LayerHeight / Steps;
 	float3 CurrentWorldPosition = NearIntersection;
@@ -184,5 +183,5 @@ float4 main(float4 pos : SV_Position, float4 WorldPosition : POSITION0, float3 c
 	//float3 Color = CloudColor * (1 - Trans);
 	float3 Color = CloudColor;
 
-	return float4(Color * Density, 1.0f);
+	return float4(Color, Density);
 }
